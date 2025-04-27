@@ -256,21 +256,30 @@ html, body {
     top: 50%;
     right: 5px; /* Position INSIDE the right edge */
     transform: translateY(-50%); /* Center vertically */
-    background: none; border: none; font-size: 1.6em; /* Adjust size */
-    padding: 0 5px; cursor: pointer; color: var(--hint-toggle-color);
-    line-height: 1;
+    background: none; border: none;
+    padding: 0 3px; /* Adjust padding */
+    cursor: pointer; color: var(--hint-toggle-color);
+    line-height: 0; /* Prevent button taking extra height due to line */
     transition: color 0.2s ease;
     z-index: 5; /* Ensure it's clickable */
+    /* Font size removed, use width/height on SVG */
 }
 .hint-toggle:hover { color: var(--hint-toggle-hover-color); }
 
+/* Style SVG icons */
+.hint-toggle svg {
+    width: 1.4em;  /* Control size using em relative to parent potential font size */
+    height: 1.4em;
+    stroke: currentColor; /* Inherit color from button */
+    vertical-align: middle; /* Align icon nicely */
+}
+
 /* Target the outer wrapper for hint visibility control */
 /* Use > (child combinator) now that button is inside wrapper */
-#target-pattern-outer-wrapper > .hint-toggle .icon-visible,
-#target-pattern-outer-wrapper > .hint-toggle .icon-hidden { display: none; }
+#target-pattern-outer-wrapper > .hint-toggle > svg { display: none; } /* Hide both SVGs by default */
 
-#target-pattern-outer-wrapper:not(.hint-hidden) > .hint-toggle .icon-visible { display: inline; }
-#target-pattern-outer-wrapper.hint-hidden > .hint-toggle .icon-hidden { display: inline; }
+#target-pattern-outer-wrapper:not(.hint-hidden) > .hint-toggle > svg.icon-visible { display: inline-block; }
+#target-pattern-outer-wrapper.hint-hidden > .hint-toggle > svg.icon-hidden { display: inline-block; }
 
 /* Hide the pattern SVGs when hint is hidden */
 #target-pattern-outer-wrapper.hint-hidden .pattern-container svg { visibility: hidden; }
@@ -461,9 +470,12 @@ html, body {
     }
 
     /* Adjust hint toggle size for mobile */
+     .hint-toggle svg {
+        width: 1.2em;
+        height: 1.2em;
+    }
      .hint-toggle {
-        font-size: 1.4em;
-        right: 3px; /* Keep closer to edge */
-        padding: 0 3px;
+        right: 2px; /* Keep closer to edge */
+        padding: 0 2px;
     }
 }

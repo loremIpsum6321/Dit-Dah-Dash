@@ -386,7 +386,7 @@ html, body {
     }
 
     #text-display {
-        font-size: 2.6em; /* Slightly smaller text */
+        font-size: 1.6em; /* Slightly smaller text */
         line-height: 1.5; /* Adjust line height */
         padding: 5px;
     }

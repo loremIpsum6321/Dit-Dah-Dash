@@ -7,10 +7,26 @@
 
 class AudioPlayer {
     /**
+     * Manages audio playback for Morse code tones and feedback sounds.
+     *
      * @constructor
-     * Initializes audio properties.
+     * @property {AudioContext | null} audioContext - The Web Audio API context.
+     * @property {GainNode | null} masterGainNode - The main gain node for volume control.
+     * @property {boolean} isSoundEnabled - Flag indicating if sound is globally enabled.
+     * @property {number} wpm - Current Words Per Minute setting.
+     * @property {number} toneFrequency - Base frequency for Morse tones (Hz).
+     * @property {number} rampTime - Fade in/out time for tones (seconds).
+     * @property {number} ditDurationSec - Calculated duration of a dit in seconds.
+     * @property {number} dahDurationSec - Calculated duration of a dah in seconds.
+     * @property {number} intraCharGapSec - Calculated duration of gap between elements within a character.
+     * @property {number} interCharGapSec - Calculated duration of gap between characters.
+     * @property {number} wordGapSec - Calculated duration of gap between words.
+     * @property {Array<object>} playbackNodes - Stores { osc, gain } for active sequence playback nodes.
+     * @property {number | null} playbackCompletionTimeoutId - Timeout ID for sequence completion callback.
+     * @property {boolean} isCurrentlyPlayingBack - Flag indicating if a sequence is actively playing.
      */
     constructor() {
+        /** Initializes audio properties and calculates initial timings. */
         this.audioContext = null;
         this.masterGainNode = null;
         this.isSoundEnabled = true;
@@ -28,7 +44,7 @@ class AudioPlayer {
         // Playback state
         this.playbackNodes = []; // Stores { osc, gain } for sequence playback
         this.playbackCompletionTimeoutId = null;
-        this.isCurrentlyPlayingBack = false;
+        this.isCurrentlyPlayingBack = False;
 
         this._calculateTimings(); // Initial calculation based on default WPM
     }
@@ -197,11 +213,13 @@ class AudioPlayer {
         if (window.morseGameState) window.morseGameState.status = GameStatus.PLAYING_BACK;
 
         let scheduledTime = this.audioContext.currentTime; // Start scheduling from now
-        const elements = morseString.split(/(\s+|\/|\|)/); // Split by elements and separators
+        // Split by elements and capture separators (Improved regex)
+        const elements = morseString.split(/(\.|\-|\/|\|| )/);
 
         elements.forEach(element => {
-            if (!element) return; // Skip empty strings from split
-            element = element.trim();
+            if (!element || element === ' ') return; // Skip empty strings and simple spaces (handled by gaps)
+            element = element.trim(); // Should already be trimmed by split, but good practice
+
             let currentDuration = 0; // Duration of the sound element itself
             let gapDuration = this.intraCharGapSec; // Default gap follows the element
 
@@ -213,21 +231,21 @@ class AudioPlayer {
                 this._scheduleTone(scheduledTime, currentDuration, this.toneFrequency, true);
             } else if (element === '/') { // Inter-character gap marker
                 currentDuration = 0; // No sound for the marker itself
-                gapDuration = this.interCharGapSec; // Use the longer gap *after* this point
+                // Calculate gap duration *relative* to the default intra-char gap already assumed
+                gapDuration = this.interCharGapSec - this.intraCharGapSec;
             } else if (element === '|') { // Word gap marker
                 currentDuration = 0;
-                gapDuration = this.wordGapSec; // Use the word gap *after* this point
-            } else if (element === ' ') { // Space between dits/dahs within a character
-                 currentDuration = 0; // No sound
-                 gapDuration = this.intraCharGapSec; // Default intra-character gap
+                 // Calculate gap duration *relative* to the default intra-char gap already assumed
+                gapDuration = this.wordGapSec - this.intraCharGapSec;
             } else {
-                 // Skip unknown elements (shouldn't happen with valid Morse string)
+                 // Skip unknown elements
                  return;
             }
 
             // Advance the schedule time by the duration of the sound (if any)
             // plus the duration of the gap that *follows* it.
-            scheduledTime += currentDuration + gapDuration;
+            // Ensure gapDuration is not negative if timing constants are unusual
+            scheduledTime += currentDuration + Math.max(0, gapDuration);
         });
 
         // Schedule the completion callback slightly after the last sound/gap is expected to finish
@@ -293,14 +311,15 @@ class AudioPlayer {
 
     // --- Optional Feedback Sounds ---
 
-    /** Plays a short, higher-pitched sound for correct feedback. */
+    /** Plays a sound for correct feedback (currently silent). */
     playCorrectSound() {
-        this._playFeedbackSound(this.toneFrequency * 0, 0);
+        this._playFeedbackSound(this.toneFrequency * 0, 0); // Frequency 0 = silent
     }
 
-    /** Plays a slightly longer, lower-pitched sound for incorrect feedback. */
+    /** Plays a sound for incorrect feedback (now silent). */
     playIncorrectSound() {
-        this._playFeedbackSound(this.toneFrequency * 0.5, 0.2);
+        // Changed frequency multiplier from 0.5 to 0 to silence it
+        this._playFeedbackSound(this.toneFrequency * 0, 0.2); // Frequency 0 = silent
     }
 
     /**
@@ -310,6 +329,9 @@ class AudioPlayer {
      * @private
      */
     _playFeedbackSound(frequency, durationSeconds) {
+        // If frequency is 0 or duration is 0, don't bother creating nodes
+        if (frequency <= 0 || durationSeconds <=0) return;
+
         if (!this.isSoundEnabled || !this.initializeAudioContext() || !this.masterGainNode) return;
         try {
             const now = this.audioContext.currentTime;

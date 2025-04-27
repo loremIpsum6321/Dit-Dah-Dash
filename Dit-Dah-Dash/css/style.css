@@ -223,8 +223,8 @@ html, body {
 .char.space { display: inline-block; /* Treat space like a measurable character */ min-width: 0.4em; /* Give space some width */ }
 
 /* --- Pattern Displays (Game Mode) --- */
-#target-pattern-outer-wrapper { /* New wrapper for positioning hint toggle */
-    position: relative; /* Needed for absolute positioning of button */
+#target-pattern-outer-wrapper {
+    position: relative; /* Needed for absolute positioning of button INSIDE */
     width: 80%; max-width: 400px;
     margin: 8px auto; /* Default margin */
     flex-shrink: 0;
@@ -253,8 +253,9 @@ html, body {
 /* Hint Visibility Styles */
 .hint-toggle {
     position: absolute;
-    top: 50%; right: -5px; /* Position to the right, adjust as needed */
-    transform: translate(100%, -50%); /* Center vertically, push outside */
+    top: 50%;
+    right: 5px; /* Position INSIDE the right edge */
+    transform: translateY(-50%); /* Center vertically */
     background: none; border: none; font-size: 1.6em; /* Adjust size */
     padding: 0 5px; cursor: pointer; color: var(--hint-toggle-color);
     line-height: 1;
@@ -264,11 +265,12 @@ html, body {
 .hint-toggle:hover { color: var(--hint-toggle-hover-color); }
 
 /* Target the outer wrapper for hint visibility control */
-#target-pattern-outer-wrapper .hint-toggle .icon-visible,
-#target-pattern-outer-wrapper .hint-toggle .icon-hidden { display: none; }
+/* Use > (child combinator) now that button is inside wrapper */
+#target-pattern-outer-wrapper > .hint-toggle .icon-visible,
+#target-pattern-outer-wrapper > .hint-toggle .icon-hidden { display: none; }
 
-#target-pattern-outer-wrapper:not(.hint-hidden) .hint-toggle .icon-visible { display: inline; }
-#target-pattern-outer-wrapper.hint-hidden .hint-toggle .icon-hidden { display: inline; }
+#target-pattern-outer-wrapper:not(.hint-hidden) > .hint-toggle .icon-visible { display: inline; }
+#target-pattern-outer-wrapper.hint-hidden > .hint-toggle .icon-hidden { display: inline; }
 
 /* Hide the pattern SVGs when hint is hidden */
 #target-pattern-outer-wrapper.hint-hidden .pattern-container svg { visibility: hidden; }
@@ -458,9 +460,10 @@ html, body {
          padding: 3px 6px;
     }
 
-    /* Hint toggle might need slight repositioning if elements changed size drastically */
+    /* Adjust hint toggle size for mobile */
      .hint-toggle {
         font-size: 1.4em;
-        right: -3px;
+        right: 3px; /* Keep closer to edge */
+        padding: 0 3px;
     }
 }

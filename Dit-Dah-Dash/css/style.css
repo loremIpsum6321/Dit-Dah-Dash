@@ -184,23 +184,28 @@ html, body {
 /* --- Text Display (Game Mode) --- */
 #text-display-wrapper {
     display: flex; align-items: center; justify-content: center; flex-grow: 1;
-    padding: 5px 0; overflow-y: auto; line-height: 1.8; width: 100%;
-    max-width: 90%; margin: 0 auto; border: var(--text-display-border);
+    padding: 5px 10px; /* Add slight padding inside wrapper */ overflow: hidden; /* Hide overflow */
+    line-height: 1.5; /* Adjusted line height */ width: 100%;
+    max-width: 90%; margin: 5px auto; /* Reduced margin */ border: var(--text-display-border);
     border-radius: 8px; background-color: var(--text-display-wrapper-bg);
     transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 #text-display {
-    font-size: 3.5em; /* Default font size */
+    font-size: 3.5em; /* Default/Max font size - JS will reduce this */
     white-space: pre-wrap; text-align: center;
-    word-break: keep-all; overflow-wrap: break-word; max-width: 100%; padding: 10px;
+    word-break: keep-all; /* Prevent breaking mid-word if possible */ overflow-wrap: break-word; /* Allow breaking long words if necessary */
+    max-width: 100%; width: 100%; /* Ensure it tries to fill wrapper */
+    padding: 0; /* Padding is now on the wrapper */
+    overflow: hidden; /* Hide any final small overflow */
+    /* transition: font-size 0.1s linear; Removed for now to prevent visual jumps during adjustment */
 }
-.char { display: inline-block; min-width: 0.6em; transition: background-color 0.2s ease, color 0.2s ease; border-radius: 3px; padding: 0 0.05em; margin: 0 0.02em; }
+.char { display: inline-block; /* min-width: 0.6em; */ /* Removed min-width, let font-size dictate */ transition: background-color 0.2s ease, color 0.2s ease; border-radius: 3px; padding: 0 0.05em; margin: 0 0.02em; }
 .char.pending { color: var(--char-pending-color); }
 .char.current { background-color: var(--char-current-bg); color: var(--char-current-color); box-shadow: var(--char-current-shadow); font-weight: bold; }
 .char.completed { color: var(--char-completed-color); font-weight: bold; }
 .char.incorrect { color: var(--char-incorrect-color); background-color: var(--char-incorrect-bg); animation: shake 0.3s ease-in-out; }
 @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
-.char.space { min-width: 0.5em; }
+.char.space { display: inline; /* Treat space like a normal character for flow */ min-width: 0.3em; /* Give space some minimum width */ }
 
 /* --- Pattern Displays (Game Mode) --- */
 #target-pattern-outer-wrapper { /* New wrapper for positioning hint toggle */
@@ -242,15 +247,16 @@ html, body {
     z-index: 5; /* Ensure it's clickable */
 }
 .hint-toggle:hover { color: var(--hint-toggle-hover-color); }
-.hint-toggle .icon-visible,
-.hint-toggle .icon-hidden { display: none; } /* Hide both icons by default */
 
-/* Show the correct icon based on container state */
-#target-pattern-outer-wrapper:not(.hint-hidden) ~ .hint-toggle .icon-visible { display: inline; } /* Changed selector slightly to account for wrapper */
-#target-pattern-outer-wrapper.hint-hidden ~ .hint-toggle .icon-hidden { display: inline; } /* Changed selector slightly */
+/* Target the outer wrapper for hint visibility control */
+#target-pattern-outer-wrapper .hint-toggle .icon-visible,
+#target-pattern-outer-wrapper .hint-toggle .icon-hidden { display: none; }
+
+#target-pattern-outer-wrapper:not(.hint-hidden) .hint-toggle .icon-visible { display: inline; }
+#target-pattern-outer-wrapper.hint-hidden .hint-toggle .icon-hidden { display: inline; }
 
 /* Hide the pattern SVGs when hint is hidden */
-#target-pattern-outer-wrapper.hint-hidden .pattern-container svg { visibility: hidden; } /* Target SVGs inside container */
+#target-pattern-outer-wrapper.hint-hidden .pattern-container svg { visibility: hidden; }
 
 
 /* --- Stats Display (Game Mode) --- */
@@ -371,7 +377,17 @@ html, body {
 /* --- Utility Classes --- */
 .hidden { display: none !important; }
 
-/* --- Responsive Adjustments for Landscape Mobile --- */
+/* --- Responsive Adjustments --- */
+
+/* Base responsive font size for text display */
+#text-display {
+    /* Start with a base size relative to viewport width, clamped */
+    font-size: clamp(1.5em, 6vw, 3.5em);
+    /* JS will override this inline if needed */
+}
+
+
+/* Responsive Adjustments for Landscape Mobile */
 @media screen and (orientation: landscape) and (max-height: 550px) { /* Target typical phone landscape heights */
 
     #display-area {
@@ -386,34 +402,37 @@ html, body {
     }
 
     #text-display {
-        font-size: 1.6em; /* Slightly smaller text */
-        line-height: 1.5; /* Adjust line height */
-        padding: 5px;
+        /* Adjust clamp for landscape, maybe smaller max */
+        font-size: clamp(1em, 5vh, 2.5em); /* Base relative to viewport height */
+        line-height: 1.4; /* Adjust line height */
+        /* JS will still override */
     }
 
     #text-display-wrapper {
          max-width: 95%; /* Allow slightly wider display */
+         margin: 3px auto; /* Reduce top/bottom margin */
+         padding: 3px 5px; /* Reduce padding */
     }
 
     #target-pattern-outer-wrapper,
     #user-pattern-container {
         width: 90%; /* More width relative to screen */
-        max-width: 300px; /* Limit absolute size */
+        max-width: 280px; /* Limit absolute size */
         margin: 4px auto; /* Reduced vertical margin */
     }
 
     .pattern-container {
-        min-height: 35px; /* Slightly shorter pattern display */
-        padding: 3px 8px;
-        gap: 3px;
+        min-height: 30px; /* Slightly shorter pattern display */
+        padding: 2px 6px;
+        gap: 2px;
     }
 
     .pattern-container svg {
-        width: 16px; /* Smaller pattern symbols */
-        height: 16px;
+        width: 14px; /* Smaller pattern symbols */
+        height: 14px;
     }
     .pattern-container svg.pattern-dah {
-        width: 24px; /* Smaller pattern symbols */
+        width: 21px; /* Smaller pattern symbols */
     }
 
     #stats-display {

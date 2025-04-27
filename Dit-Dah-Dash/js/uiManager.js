@@ -3,7 +3,7 @@
  * ---------------
  * Handles DOM interactions, manages UI visibility for different views, updates displays,
  * manages settings UI (WPM, Frequency, Sound, Dark Mode, Hint Visibility),
- * applies theme, and sets up event listeners. Includes auto-scrolling logic.
+ * applies theme, and sets up event listeners. Includes auto-scrolling and dynamic font sizing.
  */
 
 class UIManager {
@@ -248,7 +248,81 @@ class UIManager {
     /** Sets visual feedback state for pattern displays. */
     setPatternDisplayState(state) { if (!this.targetPatternContainer || !this.userPatternContainer) return; if (this._feedbackTimeout) clearTimeout(this._feedbackTimeout); const containers = [this.targetPatternContainer, this.userPatternContainer]; containers.forEach(c => c.classList.remove('correct-pattern', 'incorrect-pattern')); if (state === 'correct' || state === 'incorrect') { const className = state === 'correct' ? 'correct-pattern' : 'incorrect-pattern'; containers.forEach(c => c.classList.add(className)); this._feedbackTimeout = setTimeout(() => { containers.forEach(c => c.classList.remove(className)); this._feedbackTimeout = null; }, MorseConfig.INCORRECT_FLASH_DURATION); } }
     /** Renders the sentence text. */
-    renderSentence(sentence) { if (!this.textDisplay) return; this.textDisplay.innerHTML = ''; if (sentence) { sentence.split('').forEach((char, index) => { const span = document.createElement('span'); span.textContent = char; span.classList.add('char', 'pending'); span.dataset.index = index; if (char === ' ') span.classList.add('space'); this.textDisplay.appendChild(span); }); } this.resetCharacterStyles(); this.updateUserPatternDisplay(""); this.setPatternDisplayState('default'); }
+    renderSentence(sentence) {
+         if (!this.textDisplay) return;
+         this.textDisplay.innerHTML = '';
+         // Reset font size before adding new content
+         this.textDisplay.style.fontSize = ''; // Use CSS default
+
+         if (sentence) {
+             sentence.split('').forEach((char, index) => {
+                 const span = document.createElement('span');
+                 span.textContent = char;
+                 span.classList.add('char', 'pending');
+                 span.dataset.index = index;
+                 if (char === ' ') span.classList.add('space');
+                 this.textDisplay.appendChild(span);
+             });
+         }
+         this.resetCharacterStyles();
+         this.updateUserPatternDisplay("");
+         this.setPatternDisplayState('default');
+
+         // Adjust font size after content is rendered
+         this._adjustTextDisplayFontSize();
+    }
+
+    /**
+     * Dynamically adjusts the font size of the text display to fit the container.
+     * @private
+     */
+    _adjustTextDisplayFontSize() {
+        const element = this.textDisplay;
+        const container = this.textDisplayWrapper;
+
+        if (!element || !container || !element.textContent) {
+            element.style.fontSize = ''; // Reset if no content
+            return;
+        }
+
+        // Resetting ensures we start from the CSS-defined size or inherit
+        element.style.fontSize = '';
+
+        let currentFontSize = parseFloat(window.getComputedStyle(element).fontSize);
+        const minFontSize = 10; // Minimum font size in pixels to prevent tiny text
+        let iterations = 0;
+        const maxIterations = 100; // Prevent infinite loops
+
+        // Temporarily allow potential overflow to measure correctly
+        const originalOverflow = container.style.overflow;
+        container.style.overflow = 'visible';
+        element.style.whiteSpace = 'nowrap'; // Check width first
+
+        // Check width overflow (more common with long words)
+        while (element.scrollWidth > container.clientWidth && currentFontSize > minFontSize && iterations < maxIterations) {
+            currentFontSize *= 0.95; // Reduce font size
+            element.style.fontSize = `${currentFontSize}px`;
+            iterations++;
+        }
+
+        // Check height overflow (after width is potentially adjusted)
+        element.style.whiteSpace = 'pre-wrap'; // Reset white-space for height check
+        iterations = 0; // Reset iterations for height check
+        while (element.scrollHeight > container.clientHeight && currentFontSize > minFontSize && iterations < maxIterations) {
+            currentFontSize *= 0.95; // Reduce font size
+            element.style.fontSize = `${currentFontSize}px`;
+            iterations++;
+        }
+
+        // Restore original overflow style
+        container.style.overflow = originalOverflow;
+
+        if (iterations >= maxIterations) {
+            console.warn("Max font size adjustment iterations reached.");
+        }
+         console.log(`Adjusted font size to: ${currentFontSize.toFixed(2)}px`);
+    }
+
     /** Resets character spans to 'pending'. */
     resetCharacterStyles() { this.textDisplay?.querySelectorAll('.char').forEach(span => { span.className = 'char pending'; if (span.textContent === ' ') span.classList.add('space'); }); }
     /** Updates visual state of a character span. */
@@ -362,6 +436,9 @@ class UIManager {
                 this.hideSettings();
             }
         });
+
+        // Optional: Add resize listener to readjust font if needed
+        // window.addEventListener('resize', () => this._adjustTextDisplayFontSize());
     }
 
     // --- Getters ---

@@ -25,11 +25,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /** Initializes settings, input handler, listeners, and shows the main menu */
     function initializeApp() {
-        applyInitialSettings(); // Apply WPM, Freq, Sound, Hint from UIManager
-        initializeInputHandler();
-        setupEventListeners();
-        showMainMenu();
-        console.log("Dit-Dah-Dash Initialized and Ready.");
+    // Initialize inputHandler FIRST
+    initializeInputHandler(); // Moved up
+
+    // THEN apply settings which might use inputHandler
+    applyInitialSettings(); // Now inputHandler should exist
+
+    setupEventListeners();
+    showMainMenu();
+    console.log("Dit-Dah-Dash Initialized and Ready.");
     }
 
     /** Applies initial settings loaded by UIManager to relevant modules */

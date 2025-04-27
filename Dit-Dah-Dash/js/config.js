@@ -301,9 +301,9 @@ const LEVELS_DATA = [
 // console.log(JSON.stringify(LEVELS_DATA, null, 2)); // Optional: Print formatted JSON
 
 // --- Audio Configuration ---
-const AUDIO_DEFAULT_TONE_FREQUENCY = 600; // Default frequency in Hz
+const AUDIO_DEFAULT_TONE_FREQUENCY = 400; // Default frequency in Hz
 const AUDIO_RAMP_TIME = 0.005; // Fade in/out time for tones (seconds)
-const AUDIO_MIN_FREQUENCY = 400; // Minimum adjustable frequency
+const AUDIO_MIN_FREQUENCY = 200; // Minimum adjustable frequency
 const AUDIO_MAX_FREQUENCY = 1000; // Maximum adjustable frequency
 
 // --- Scoring ---

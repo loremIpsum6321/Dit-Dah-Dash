@@ -295,12 +295,12 @@ class AudioPlayer {
 
     /** Plays a short, higher-pitched sound for correct feedback. */
     playCorrectSound() {
-        this._playFeedbackSound(this.toneFrequency * 1.5, 0.05);
+        this._playFeedbackSound(this.toneFrequency * 0, 0);
     }
 
     /** Plays a slightly longer, lower-pitched sound for incorrect feedback. */
     playIncorrectSound() {
-        this._playFeedbackSound(this.toneFrequency * 0.7, 0.1);
+        this._playFeedbackSound(this.toneFrequency * 0.5, 0.2);
     }
 
     /**

@@ -58,7 +58,7 @@
     --settings-text-color: #333;
     --settings-toggle-color: #777;
     --settings-toggle-hover-color: #333;
-    --level-button-bg: #e0e0e0;
+    --level-button-bg: #e0e0e0; /* Used for list items */
     --level-button-color: #333;
     --level-button-hover-bg: #d5d5d5;
     --level-locked-bg: #f5f5f5;
@@ -82,7 +82,7 @@
     --input-area-bg: #424242;
     --button-dit-bg: #03A9F4;
     --button-dah-bg: #FFC107;
-    --button-text-color: #212121;
+    --button-text-color: #212121; /* Dark text on light buttons often looks better */
     --button-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
     --button-active-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
     --pattern-bg: #444444;
@@ -123,7 +123,7 @@
     --settings-text-color: #e0e0e0;
     --settings-toggle-color: #bdbdbd;
     --settings-toggle-hover-color: #f5f5f5;
-    --level-button-bg: #616161;
+    --level-button-bg: #616161; /* Used for list items */
     --level-button-color: #e0e0e0;
     --level-button-hover-bg: #757575;
     --level-locked-bg: #424242;
@@ -149,15 +149,17 @@ html, body {
 /* --- Main Layout --- */
 #game-container { display: flex; flex-direction: column; width: 100%; height: 100%; position: fixed; top: 0; left: 0; }
 #display-area {
-    width: 100%; height: 80%; display: flex; flex-direction: column;
+    width: 100%; height: 80%; /* Default height */
+    display: flex; flex-direction: column;
     padding: 10px 15px; position: relative; background-color: var(--container-bg);
     border-bottom: 2px solid var(--border-color); overflow: hidden;
-    transition: background-color 0.3s ease, border-color 0.3s ease;
+    transition: background-color 0.3s ease, border-color 0.3s ease, height 0.3s ease; /* Added height transition */
 }
 #input-area {
-    width: 100%; height: 20%; display: flex; justify-content: space-between;
+    width: 100%; height: 20%; /* Default height */
+    display: flex; justify-content: space-between;
     align-items: stretch; padding: 15px; gap: 15px; background-color: var(--input-area-bg);
-    transition: background-color 0.3s ease;
+    transition: background-color 0.3s ease, height 0.3s ease; /* Added height transition */
 }
 
 /* --- Game Mode UI Wrapper --- */
@@ -170,7 +172,8 @@ html, body {
     transition: background-color 0.1s ease, transform 0.05s ease, box-shadow 0.1s ease;
     display: flex; justify-content: center; align-items: center; user-select: none;
     -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none;
-    height: 100%; padding: 10px;
+    height: 100%; /* Takes full height of parent (#input-area) */
+    padding: 10px;
 }
 #dit-button svg { width: 20%; height: 30%; fill: currentColor; pointer-events: none; }
 #dah-button svg { width: 20%; height: 45%; fill: currentColor; pointer-events: none; }
@@ -187,7 +190,8 @@ html, body {
     transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 #text-display {
-    font-size: 3.5em; white-space: pre-wrap; text-align: center;
+    font-size: 3.5em; /* Default font size */
+    white-space: pre-wrap; text-align: center;
     word-break: keep-all; overflow-wrap: break-word; max-width: 100%; padding: 10px;
 }
 .char { display: inline-block; min-width: 0.6em; transition: background-color 0.2s ease, color 0.2s ease; border-radius: 3px; padding: 0 0.05em; margin: 0 0.02em; }
@@ -202,24 +206,25 @@ html, body {
 #target-pattern-outer-wrapper { /* New wrapper for positioning hint toggle */
     position: relative; /* Needed for absolute positioning of button */
     width: 80%; max-width: 400px;
-    margin: 8px auto; /* Matches pattern-container margin */
+    margin: 8px auto; /* Default margin */
     flex-shrink: 0;
 }
 .pattern-container {
     width: 100%; /* Take width from outer wrapper */
-    min-height: 45px;
+    min-height: 45px; /* Default height */
     padding: 5px 10px; background-color: var(--pattern-bg); border-radius: 8px;
     display: flex; justify-content: center; align-items: center; gap: 4px;
     transition: background-color 0.15s ease-in-out;
     /* No margin here, handled by outer wrapper or direct placement */
 }
 #user-pattern-container { /* Keep margin if not wrapped */
-    margin: 8px auto; flex-shrink: 0;
+    margin: 8px auto; /* Default margin */
+    flex-shrink: 0;
     width: 80%; max-width: 400px;
 }
 
 .pattern-container svg { width: 20px; height: 20px; fill: var(--pattern-svg-fill); transition: fill 0.15s ease-in-out, visibility 0s; }
-.pattern-container svg.pattern-dah { width: 30px; }
+.pattern-container svg.pattern-dah { width: 30px; } /* Default sizes */
 .pattern-container.correct-pattern { background-color: var(--pattern-correct-bg); }
 .pattern-container.correct-pattern svg { fill: var(--pattern-correct-fill); }
 .pattern-container.incorrect-pattern { background-color: var(--pattern-incorrect-bg); }
@@ -241,11 +246,12 @@ html, body {
 .hint-toggle .icon-hidden { display: none; } /* Hide both icons by default */
 
 /* Show the correct icon based on container state */
-#target-pattern-container:not(.hint-hidden) + .hint-toggle .icon-visible { display: inline; }
-#target-pattern-container.hint-hidden + .hint-toggle .icon-hidden { display: inline; }
+#target-pattern-outer-wrapper:not(.hint-hidden) ~ .hint-toggle .icon-visible { display: inline; } /* Changed selector slightly to account for wrapper */
+#target-pattern-outer-wrapper.hint-hidden ~ .hint-toggle .icon-hidden { display: inline; } /* Changed selector slightly */
 
 /* Hide the pattern SVGs when hint is hidden */
-#target-pattern-container.hint-hidden svg { visibility: hidden; }
+#target-pattern-outer-wrapper.hint-hidden .pattern-container svg { visibility: hidden; } /* Target SVGs inside container */
+
 
 /* --- Stats Display (Game Mode) --- */
 #stats-display { display: flex; justify-content: space-around; align-items: center; padding: 8px 0; font-size: 1.3em; color: var(--stats-color); margin-top: auto; flex-wrap: wrap; gap: 8px; width: 100%; flex-shrink: 0; border-top: var(--stats-border); transition: color 0.3s ease, border-color 0.3s ease; }
@@ -282,7 +288,7 @@ html, body {
 #settings-toggle-button:hover { color: var(--settings-toggle-hover-color); }
 #settings-controls { position: absolute; top: 45px; right: 0; background-color: var(--settings-bg); border: var(--settings-border); border-radius: 8px; padding: 15px; box-shadow: var(--settings-shadow); display: flex; flex-direction: column; gap: 12px; min-width: 220px; color: var(--settings-text-color); font-size: 1.2em; transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease; }
 #settings-controls.hidden { display: none !important; }
-#settings-controls label { margin-bottom: -5px; }
+#settings-controls label { margin-bottom: -5px; display: flex; justify-content: space-between; align-items: center; } /* Ensure label elements align nicely */
 #settings-controls input[type="range"] { width: 100%; cursor: pointer; }
 #settings-controls input[type="checkbox"] { margin-right: 5px; transform: scale(1.4); cursor: pointer; accent-color: var(--button-primary-bg); }
 #settings-controls button { padding: 8px 12px; background-color: var(--button-reset-bg); border: 1px solid var(--border-color); border-radius: 5px; cursor: pointer; font-size: 1.1em; color: var(--text-color); transition: background-color 0.2s ease; }
@@ -293,41 +299,64 @@ html, body {
 /* --- Overlays (Main Menu, Results, Level Select) --- */
 .overlay {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: var(--overlay-bg);
-    z-index: 20; display: flex; flex-direction: column; justify-content: center; align-items: center;
-    padding: 20px; text-align: center; box-shadow: var(--overlay-shadow); overflow-y: auto; font-size: 1.4em;
+    z-index: 20; display: flex; flex-direction: column; justify-content: flex-start; /* Align top */ align-items: center;
+    padding: 20px; text-align: center; box-shadow: var(--overlay-shadow); overflow-y: auto; /* Allow scrolling for the whole overlay */ font-size: 1.4em;
     color: var(--text-color);
     transition: background-color 0.3s ease;
 }
-.overlay h2 { margin-bottom: 20px; color: var(--text-color); font-size: 1.8em; }
-.overlay p { margin-bottom: 15px; font-size: 1.4em; color: var(--text-color); opacity: 0.9; }
-.overlay small { font-size: 1.0em; color: var(--text-color); opacity: 0.7; display: block; margin-bottom: 15px; }
-.overlay > div { margin-top: 10px; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;}
+.overlay h2 { margin-bottom: 20px; margin-top: 10px; /* Add some top margin */ color: var(--text-color); font-size: 1.8em; flex-shrink: 0; }
+.overlay p { margin-bottom: 15px; font-size: 1.4em; color: var(--text-color); opacity: 0.9; flex-shrink: 0; }
+.overlay small { font-size: 1.0em; color: var(--text-color); opacity: 0.7; display: block; margin-bottom: 15px; flex-shrink: 0; }
+.overlay > div { margin-top: 10px; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; flex-shrink: 0; }
 .overlay button {
     padding: 12px 24px; font-size: 1.3em; cursor: pointer; border: none; border-radius: 8px;
     background-color: var(--button-primary-bg); color: var(--button-text-color); margin: 5px; transition: background-color 0.2s ease; min-width: 140px;
+    flex-shrink: 0;
 }
 .overlay button:hover:not(:disabled) { background-color: var(--button-primary-hover-bg); }
 .overlay button:disabled { opacity: 0.6; cursor: not-allowed; }
 
 /* Main Menu Specifics */
+#main-menu-overlay { justify-content: center; } /* Center main menu content */
 #main-menu-overlay div { display: flex; flex-direction: column; align-items: center; width: 100%; }
 #main-menu-overlay button { width: 70%; max-width: 300px; margin: 10px 0; }
 
 /* Level Selection Specifics */
 #level-selection-screen h2 { margin-bottom: 15px; }
-#level-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-bottom: 20px; max-height: 60%; overflow-y: auto; width: 100%; max-width: 600px; padding: 10px; }
-#level-list button {
-     padding: 10px 15px; font-size: 1.1em;
-     border: none; border-radius: 6px; transition: background-color 0.2s ease, transform 0.1s ease, color 0.2s ease; margin: 0;
+#level-list {
+    display: flex; /* Use flex for better control */
+    flex-direction: column; /* Stack items vertically */
+    align-items: stretch; /* Make items fill container width */
+    gap: 10px; /* Space between list items */
+    margin-bottom: 20px;
+    /* REMOVED max-height and overflow-y */
+    width: 90%; /* Adjust width as needed */
+    max-width: 500px; /* Limit maximum width */
+    padding: 10px;
+    /* Optional: Remove border if you don't want the list container visible */
+    /* border: 1px solid var(--border-color); */
+    border-radius: 8px;
+    flex-shrink: 0; /* Prevent list from shrinking if overlay content is sparse */
 }
-#level-list button:hover:not(:disabled) { transform: translateY(-1px); }
+#level-list button {
+     padding: 12px 15px; /* Increased padding for better touch targets */
+     font-size: 1.2em; /* Slightly larger font */
+     border: none;
+     border-radius: 6px;
+     transition: background-color 0.2s ease, transform 0.1s ease, color 0.2s ease;
+     margin: 0; /* Remove margin, rely on gap */
+     width: 100%; /* Make button fill the list width */
+     text-align: center; /* Center text within the button */
+     box-sizing: border-box; /* Include padding in width calculation */
+}
+#level-list button:hover:not(:disabled) { transform: scale(1.01); } /* Subtle scale instead of translateY */
 #level-list button.locked { background-color: var(--level-locked-bg); color: var(--level-locked-color); cursor: not-allowed; opacity: 0.7; }
 #level-list button.unlocked { background-color: var(--level-unlocked-bg); color: var(--level-unlocked-color); }
 #level-list button.unlocked:hover:not(:disabled) { background-color: var(--level-unlocked-hover-bg); }
 #level-list button.completed { background-color: var(--level-completed-bg); color: var(--level-completed-color); }
 #level-list button.completed:hover:not(:disabled) { background-color: var(--level-completed-hover-bg); }
 #level-list button:disabled { pointer-events: none; }
-#level-selection-screen .back-button { margin-top: 15px; }
+#level-selection-screen .back-button { margin-top: 15px; flex-shrink: 0; /* Keep back button visible */ }
 
 
 /* Results Screen Specifics */
@@ -341,3 +370,64 @@ html, body {
 
 /* --- Utility Classes --- */
 .hidden { display: none !important; }
+
+/* --- Responsive Adjustments for Landscape Mobile --- */
+@media screen and (orientation: landscape) and (max-height: 550px) { /* Target typical phone landscape heights */
+
+    #display-area {
+        height: 58%; /* Decrease display area height */
+        padding: 5px 10px; /* Reduce padding */
+    }
+
+    #input-area {
+        height: 42%; /* Increase input area height */
+        padding: 10px; /* Reduce padding */
+        gap: 10px; /* Reduce gap */
+    }
+
+    #text-display {
+        font-size: 2.6em; /* Slightly smaller text */
+        line-height: 1.5; /* Adjust line height */
+        padding: 5px;
+    }
+
+    #text-display-wrapper {
+         max-width: 95%; /* Allow slightly wider display */
+    }
+
+    #target-pattern-outer-wrapper,
+    #user-pattern-container {
+        width: 90%; /* More width relative to screen */
+        max-width: 300px; /* Limit absolute size */
+        margin: 4px auto; /* Reduced vertical margin */
+    }
+
+    .pattern-container {
+        min-height: 35px; /* Slightly shorter pattern display */
+        padding: 3px 8px;
+        gap: 3px;
+    }
+
+    .pattern-container svg {
+        width: 16px; /* Smaller pattern symbols */
+        height: 16px;
+    }
+    .pattern-container svg.pattern-dah {
+        width: 24px; /* Smaller pattern symbols */
+    }
+
+    #stats-display {
+        font-size: 1.0em; /* Smaller stats text */
+        padding: 4px 0;
+        gap: 5px;
+    }
+    #stats-display > div {
+         padding: 3px 6px;
+    }
+
+    /* Hint toggle might need slight repositioning if elements changed size drastically */
+     .hint-toggle {
+        font-size: 1.4em;
+        right: -3px;
+    }
+}

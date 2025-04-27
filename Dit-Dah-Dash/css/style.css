@@ -183,29 +183,44 @@ html, body {
 
 /* --- Text Display (Game Mode) --- */
 #text-display-wrapper {
-    display: flex; align-items: center; justify-content: center; flex-grow: 1;
-    padding: 5px 10px; /* Add slight padding inside wrapper */ overflow: hidden; /* Hide overflow */
-    line-height: 1.5; /* Adjusted line height */ width: 100%;
-    max-width: 90%; margin: 5px auto; /* Reduced margin */ border: var(--text-display-border);
+    display: flex; align-items: center; /* Center vertically */
+    flex-grow: 1; /* Take available space */
+    padding: 5px 0; /* Vertical padding only */
+    overflow-x: hidden; /* Allow JS horizontal scroll, hide scrollbar */
+    overflow-y: hidden; /* Prevent vertical scroll */
+    line-height: 1.3; /* Tighter line height might help vertical fit */
+    width: 100%;
+    max-width: 95%; /* Slightly inset */
+    margin: 5px auto; /* Reduced margin */
+    border: var(--text-display-border);
     border-radius: 8px; background-color: var(--text-display-wrapper-bg);
     transition: background-color 0.3s ease, border-color 0.3s ease;
+    position: relative; /* Needed for absolute positioning if we were to use it */
 }
 #text-display {
-    font-size: 3.5em; /* Default/Max font size - JS will reduce this */
-    white-space: pre-wrap; text-align: center;
-    word-break: keep-all; /* Prevent breaking mid-word if possible */ overflow-wrap: break-word; /* Allow breaking long words if necessary */
-    max-width: 100%; width: 100%; /* Ensure it tries to fill wrapper */
-    padding: 0; /* Padding is now on the wrapper */
-    overflow: hidden; /* Hide any final small overflow */
-    /* transition: font-size 0.1s linear; Removed for now to prevent visual jumps during adjustment */
+    font-size: 3.5em; /* Default/Max font size - JS will reduce this for height */
+    white-space: nowrap; /* <<< Force single line for ticker effect */
+    text-align: left; /* Align to left for scrolling start */
+    /* word-break: keep-all; No longer needed */
+    /* overflow-wrap: break-word; No longer needed */
+    width: max-content; /* Let width grow with content */
+    max-width: none; /* Remove max-width limit on text itself */
+    padding: 0 5px; /* Add slight horizontal padding within the text block */
+    position: relative; /* For calculating offsetLeft of spans */
+    /* transition: font-size 0.1s linear; Removed */
 }
-.char { display: inline-block; /* min-width: 0.6em; */ /* Removed min-width, let font-size dictate */ transition: background-color 0.2s ease, color 0.2s ease; border-radius: 3px; padding: 0 0.05em; margin: 0 0.02em; }
+.char { display: inline-block; /* inline-block needed for measuring */
+    /* min-width: 0.6em; Removed */
+    transition: background-color 0.2s ease, color 0.2s ease;
+    border-radius: 3px; padding: 0 0.05em; margin: 0 0.02em;
+    vertical-align: middle; /* Align better on the line */
+}
 .char.pending { color: var(--char-pending-color); }
 .char.current { background-color: var(--char-current-bg); color: var(--char-current-color); box-shadow: var(--char-current-shadow); font-weight: bold; }
 .char.completed { color: var(--char-completed-color); font-weight: bold; }
 .char.incorrect { color: var(--char-incorrect-color); background-color: var(--char-incorrect-bg); animation: shake 0.3s ease-in-out; }
 @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
-.char.space { display: inline; /* Treat space like a normal character for flow */ min-width: 0.3em; /* Give space some minimum width */ }
+.char.space { display: inline-block; /* Treat space like a measurable character */ min-width: 0.4em; /* Give space some width */ }
 
 /* --- Pattern Displays (Game Mode) --- */
 #target-pattern-outer-wrapper { /* New wrapper for positioning hint toggle */
@@ -382,8 +397,8 @@ html, body {
 /* Base responsive font size for text display */
 #text-display {
     /* Start with a base size relative to viewport width, clamped */
-    font-size: clamp(1.5em, 6vw, 3.5em);
-    /* JS will override this inline if needed */
+    /* Font size adjusted by JS based on height now */
+    /* font-size: clamp(1.5em, 6vw, 3.5em); */
 }
 
 
@@ -402,16 +417,15 @@ html, body {
     }
 
     #text-display {
-        /* Adjust clamp for landscape, maybe smaller max */
-        font-size: clamp(1em, 5vh, 2.5em); /* Base relative to viewport height */
-        line-height: 1.4; /* Adjust line height */
-        /* JS will still override */
+        /* Font size primarily controlled by JS for height fit */
+        /* line-height: 1.2; /* Adjust line height */
     }
 
     #text-display-wrapper {
          max-width: 95%; /* Allow slightly wider display */
          margin: 3px auto; /* Reduce top/bottom margin */
-         padding: 3px 5px; /* Reduce padding */
+         padding: 3px 0; /* Reduce padding */
+         line-height: 1.2; /* Adjust line height for wrapper */
     }
 
     #target-pattern-outer-wrapper,

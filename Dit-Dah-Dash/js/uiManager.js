@@ -3,7 +3,8 @@
  * ---------------
  * Handles DOM interactions, manages UI visibility for different views, updates displays,
  * manages settings UI (WPM, Frequency, Sound, Dark Mode, Hint Visibility),
- * applies theme, and sets up event listeners. Includes auto-scrolling and dynamic font sizing.
+ * applies theme, and sets up event listeners. Includes dynamic font sizing and
+ * horizontal scrolling logic.
  */
 
 class UIManager {
@@ -29,6 +30,7 @@ class UIManager {
         this.textDisplayWrapper = document.getElementById('text-display-wrapper');
         this.textDisplay = document.getElementById('text-display');
         this.targetPatternContainer = document.getElementById('target-pattern-container');
+        this.targetPatternOuterWrapper = document.getElementById('target-pattern-outer-wrapper'); // Added reference
         this.toggleHintButton = document.getElementById('toggle-hint-button'); // New
         this.userPatternContainer = document.getElementById('user-pattern-container');
         this.statsDisplay = document.getElementById('stats-display');
@@ -251,8 +253,9 @@ class UIManager {
     renderSentence(sentence) {
          if (!this.textDisplay) return;
          this.textDisplay.innerHTML = '';
-         // Reset font size before adding new content
+         // Reset font size and scroll before adding new content
          this.textDisplay.style.fontSize = ''; // Use CSS default
+         this.textDisplayWrapper.scrollLeft = 0; // Reset scroll
 
          if (sentence) {
              sentence.split('').forEach((char, index) => {
@@ -273,7 +276,8 @@ class UIManager {
     }
 
     /**
-     * Dynamically adjusts the font size of the text display to fit the container.
+     * Dynamically adjusts the font size of the text display to fit the container vertically.
+     * Assumes horizontal overflow will be handled by scrolling (`white-space: nowrap`).
      * @private
      */
     _adjustTextDisplayFontSize() {
@@ -289,48 +293,60 @@ class UIManager {
         element.style.fontSize = '';
 
         let currentFontSize = parseFloat(window.getComputedStyle(element).fontSize);
-        const minFontSize = 10; // Minimum font size in pixels to prevent tiny text
+        const minFontSize = 10; // Minimum font size in pixels
         let iterations = 0;
         const maxIterations = 100; // Prevent infinite loops
 
-        // Temporarily allow potential overflow to measure correctly
-        const originalOverflow = container.style.overflow;
-        container.style.overflow = 'visible';
-        element.style.whiteSpace = 'nowrap'; // Check width first
-
-        // Check width overflow (more common with long words)
-        while (element.scrollWidth > container.clientWidth && currentFontSize > minFontSize && iterations < maxIterations) {
-            currentFontSize *= 0.95; // Reduce font size
-            element.style.fontSize = `${currentFontSize}px`;
-            iterations++;
-        }
-
-        // Check height overflow (after width is potentially adjusted)
-        element.style.whiteSpace = 'pre-wrap'; // Reset white-space for height check
-        iterations = 0; // Reset iterations for height check
+        // Adjust font size based *only* on height overflow
         while (element.scrollHeight > container.clientHeight && currentFontSize > minFontSize && iterations < maxIterations) {
             currentFontSize *= 0.95; // Reduce font size
             element.style.fontSize = `${currentFontSize}px`;
             iterations++;
         }
 
-        // Restore original overflow style
-        container.style.overflow = originalOverflow;
-
         if (iterations >= maxIterations) {
             console.warn("Max font size adjustment iterations reached.");
         }
-         console.log(`Adjusted font size to: ${currentFontSize.toFixed(2)}px`);
+        // console.log(`Adjusted font size to: ${currentFontSize.toFixed(2)}px based on height`);
     }
 
     /** Resets character spans to 'pending'. */
     resetCharacterStyles() { this.textDisplay?.querySelectorAll('.char').forEach(span => { span.className = 'char pending'; if (span.textContent === ' ') span.classList.add('space'); }); }
     /** Updates visual state of a character span. */
-    updateCharacterState(charIndex, state) { const charSpan = this.textDisplay?.querySelector(`.char[data-index="${charIndex}"]`); if (charSpan) { charSpan.classList.remove('pending', 'current', 'completed', 'incorrect'); charSpan.classList.add(state); if (state === 'incorrect') { if (this._incorrectFlashTimeout) clearTimeout(this._incorrectFlashTimeout); this._incorrectFlashTimeout = setTimeout(() => { if (charSpan.classList.contains('incorrect')) { charSpan.classList.remove('incorrect'); const currentGameState = window.morseGameState; if (currentGameState && currentGameState.currentCharIndex === charIndex && (currentGameState.status === GameStatus.LISTENING || currentGameState.status === GameStatus.TYPING || currentGameState.status === GameStatus.DECODING)) { charSpan.classList.add('current'); } else { charSpan.classList.add('pending'); } } this._incorrectFlashTimeout = null; }, MorseConfig.INCORRECT_FLASH_DURATION); } else if (this._incorrectFlashTimeout && charSpan.classList.contains('incorrect')) { clearTimeout(this._incorrectFlashTimeout); this._incorrectFlashTimeout = null; } if (state === 'current') this._scrollIntoViewIfNeeded(charSpan); } }
+    updateCharacterState(charIndex, state) { const charSpan = this.textDisplay?.querySelector(`.char[data-index="${charIndex}"]`); if (charSpan) { charSpan.classList.remove('pending', 'current', 'completed', 'incorrect'); charSpan.classList.add(state); if (state === 'incorrect') { if (this._incorrectFlashTimeout) clearTimeout(this._incorrectFlashTimeout); this._incorrectFlashTimeout = setTimeout(() => { if (charSpan.classList.contains('incorrect')) { charSpan.classList.remove('incorrect'); const currentGameState = window.morseGameState; if (currentGameState && currentGameState.currentCharIndex === charIndex && (currentGameState.status === GameStatus.LISTENING || currentGameState.status === GameStatus.TYPING || currentGameState.status === GameStatus.DECODING)) { charSpan.classList.add('current'); } else { charSpan.classList.add('pending'); } } this._incorrectFlashTimeout = null; }, MorseConfig.INCORRECT_FLASH_DURATION); } else if (this._incorrectFlashTimeout && charSpan.classList.contains('incorrect')) { clearTimeout(this._incorrectFlashTimeout); this._incorrectFlashTimeout = null; } if (state === 'current') this._centerCurrentCharacterHorizontally(charSpan); } } // Use centering function here
     /** Highlights character and updates target pattern. */
     highlightCharacter(currentIdx, targetChar) { const prevSpan = this.textDisplay?.querySelector('.char.current'); if (prevSpan && prevSpan.dataset.index != currentIdx) { if (!prevSpan.classList.contains('incorrect') && !prevSpan.classList.contains('completed')) { prevSpan.classList.remove('current'); prevSpan.classList.add('pending'); } else { prevSpan.classList.remove('current'); } } this.updateCharacterState(currentIdx, 'current'); if (window.morseDecoder) { const morseSequence = window.morseDecoder.encodeCharacter(targetChar); this.updateTargetPatternDisplay(morseSequence ?? ""); } this.updateUserPatternDisplay(""); this.setPatternDisplayState('default'); }
-    /** Scrolls the text display wrapper to ensure the element is visible. */
-    _scrollIntoViewIfNeeded(element) { const container = this.textDisplayWrapper; if (!container || !element) return; const elementRect = element.getBoundingClientRect(); const containerRect = container.getBoundingClientRect(); if (elementRect.top < containerRect.top || elementRect.bottom > containerRect.bottom) { element.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } }
+
+    /**
+     * Scrolls the text display wrapper horizontally to center the current character.
+     * @param {HTMLElement} element - The span element of the current character.
+     * @private
+     */
+    _centerCurrentCharacterHorizontally(element) {
+        const container = this.textDisplayWrapper;
+        if (!container || !element) return;
+
+        const containerWidth = container.clientWidth;
+        const elementOffsetLeft = element.offsetLeft; // Position relative to the start of #text-display
+        const elementWidth = element.offsetWidth;
+
+        // Calculate the position of the center of the character span
+        const elementCenter = elementOffsetLeft + elementWidth / 2;
+
+        // Calculate the desired scrollLeft to center the element
+        let targetScrollLeft = elementCenter - containerWidth / 2;
+
+        // Clamp scrollLeft to valid range (0 to max scroll)
+        const maxScrollLeft = container.scrollWidth - containerWidth;
+        targetScrollLeft = Math.max(0, Math.min(targetScrollLeft, maxScrollLeft));
+
+        // Apply the scroll smoothly
+        container.scrollTo({
+            left: targetScrollLeft,
+            behavior: 'smooth'
+        });
+    }
+
     /** Updates live timer display. */
     updateTimer(elapsedTimeMs) { const totalSeconds = Math.floor(elapsedTimeMs / 1000); const minutes = Math.floor(totalSeconds / 60); const seconds = totalSeconds % 60; const milliseconds = Math.floor((elapsedTimeMs % 1000) / 100); const formattedTime = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(milliseconds)}`; if (this.timerDisplay) this.timerDisplay.textContent = `Time: ${formattedTime}`; }
     /** Updates live WPM/Accuracy displays. */
@@ -383,8 +399,8 @@ class UIManager {
     setPlaybackButtonEnabled(enabled, text = 'Play Morse') { if (this.playSentenceButton) { this.playSentenceButton.disabled = !enabled; this.playSentenceButton.textContent = text; } }
     /** Applies or removes the dark mode class from the body. */
     _applyDarkMode(enable) { this.bodyElement.classList.toggle('dark-mode', enable); }
-    /** Applies or removes the hint visibility class from the target pattern container. */
-    _applyHintVisibility(visible) { this.targetPatternContainer?.classList.toggle('hint-hidden', !visible); } // New
+    /** Applies or removes the hint visibility class from the target pattern container wrapper. */
+    _applyHintVisibility(visible) { this.targetPatternOuterWrapper?.classList.toggle('hint-hidden', !visible); } // Toggles on outer wrapper
 
     /** Adds event listeners for UI elements. */
     addEventListeners(callbacks) {
@@ -437,8 +453,14 @@ class UIManager {
             }
         });
 
-        // Optional: Add resize listener to readjust font if needed
-        // window.addEventListener('resize', () => this._adjustTextDisplayFontSize());
+        // Optional: Re-center text on window resize if needed
+        // window.addEventListener('resize', () => {
+        //     const currentSpan = this.textDisplay?.querySelector('.char.current');
+        //     if (currentSpan) {
+        //         this._centerCurrentCharacterHorizontally(currentSpan);
+        //         this._adjustTextDisplayFontSize(); // Also re-adjust font size
+        //     }
+        // });
     }
 
     // --- Getters ---

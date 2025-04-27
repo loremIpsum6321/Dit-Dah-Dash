@@ -1,6 +1,9 @@
 deployment:
   tasks:
     - export DEPLOYPATH=/home/markzpwz/public_html/Dit-Dah-Dash/
-    - cd /home/markzpwz/repositories/ditdahdash
+    - cd /home/markzpwz/repositories/ditdahdash # This cd might be redundant if cPanel runs tasks from the repo root anyway, but shouldn't hurt.
     - /bin/rsync -av --delete --exclude '.git' --exclude '.cpanel.yml' ./ "${DEPLOYPATH}"
-    - find ~/public_html/ditdashdash -type d -exec chmod 755 {} \;
+    # Potential Typo Fix Below
+    - find "${DEPLOYPATH}" -type d -exec chmod 755 {} \; # Use the variable here!
+    # Also consider setting file permissions if needed:
+    # - find "${DEPLOYPATH}" -type f -exec chmod 644 {} \;

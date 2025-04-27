@@ -1,0 +1,6 @@
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/markzpwz/public_html/Dit-Dah-Dash/
+    - cd /home/markzpwz/repositories/ditdahdash
+    - /bin/rsync -av --delete --exclude '.git' --exclude '.cpanel.yml' ./ "${DEPLOYPATH}"
+    - find ~/public_html/ditdashdash -type d -exec chmod 755 {} \;

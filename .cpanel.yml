@@ -1,9 +1,10 @@
 deployment:
   tasks:
     - export DEPLOYPATH=/home/markzpwz/public_html/Dit-Dah-Dash/
-    - cd /home/markzpwz/repositories/ditdahdash # This cd might be redundant if cPanel runs tasks from the repo root anyway, but shouldn't hurt.
-    - /bin/rsync -av --delete --exclude '.git' --exclude '.cpanel.yml' ./ "${DEPLOYPATH}"
-    # Potential Typo Fix Below
-    - find "${DEPLOYPATH}" -type d -exec chmod 755 {} \; # Use the variable here!
-    # Also consider setting file permissions if needed:
+    # Removed the incorrect 'cd' command below
+    # Copy contents FROM the nested Dit-Dah-Dash directory
+    - /bin/rsync -av --delete --exclude '.git' --exclude '.cpanel.yml' ./Dit-Dah-Dash/ "${DEPLOYPATH}"
+    # find command targets the DEPLOYPATH, which is correct
+    - find "${DEPLOYPATH}" -type d -exec chmod 755 {} \;
+    # Optional: Uncomment below if you also need to set file permissions
     # - find "${DEPLOYPATH}" -type f -exec chmod 644 {} \;

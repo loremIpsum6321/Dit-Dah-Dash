@@ -34,11 +34,271 @@ const CHARACTER_INPUT_TIMEOUT_MULTIPLIER = 1.5;
 
 // --- Level Data ---
 const LEVELS_DATA = [
-    { id: 1, name: "Basics 1", sentences: ["E T", "I S H", "A N D", "E T A", "HI HI"], unlock_criteria: { min_wpm: 0, min_accuracy: 0 } },
-    { id: 2, name: "Basics 2", sentences: ["M O R S E", "C O D E", "HELLO WORLD", "SOS SOS", "GOOD DAY"], unlock_criteria: { min_wpm: 8, min_accuracy: 85 } },
-    { id: 3, name: "Common Words", sentences: ["THE QUICK BROWN FOX", "JUMPS OVER THE LAZY DOG", "THIS IS A TEST", "PRACTICE MAKES PERFECT", "MORSE CODE IS FUN"], unlock_criteria: { min_wpm: 12, min_accuracy: 90 } },
-    { id: 4, name: "Numbers & Punctuation", sentences: ["CALL 123 456 NOW", "MEET AT 0800 HOURS", "PRICE IS $19.99?", "EMAIL ME AT TEST@EXAMPLE.COM", "FINISHED!"], unlock_criteria: { min_wpm: 15, min_accuracy: 92 } },
+    // --- Phase 1: E, T ---
+    {
+        id: 1,
+        name: "Intro: E T",
+        sentences: ["E E E", "T T T", "E T E", "T E T", "ET TE ET TE"],
+        unlock_criteria: { min_wpm: 0, min_accuracy: 0 } // Starting level
+    },
+    {
+        id: 2,
+        name: "Practice: E T",
+        sentences: [
+            "EAT THE TEA TEE EAT TEE",
+            "TEE TEE EAT EAT TEA TEA",
+            "ET TE ET TE ET TE ET",
+            "TETE EAT EAT TEE TETE TEE",
+            "E T E T E T E T"
+        ],
+        unlock_criteria: { min_wpm: 5, min_accuracy: 80 }
+    },
+
+    // --- Phase 2: Add I, M, S, O ---
+    {
+        id: 3,
+        name: "Intro: I M S O",
+        sentences: ["I I I", "M M M", "S S S", "O O O", "IS IT SO", "MOM SIS TOO", "TIME SITE"],
+        unlock_criteria: { min_wpm: 5, min_accuracy: 95 } // High accuracy for new letters
+    },
+    {
+        id: 4,
+        name: "Practice: E T I M S O",
+        sentences: [
+            "IT IS ME SEE ME EAT",
+            "SOME SITE IS SITE SITE SO",
+            "MOST ITEMS MEET SITE NEEDS TOO",
+            "SEE ME MEET TOM SITE SOON",
+            "MOSS IS SET OMITS TIES SITE",
+            "SIT TIGHT SEE ME MEET TOM",
+            "TIME IS SITE TEST TO SEE",
+            "MISS MITT MOST TIMES SO MESSY",
+            "ITEM IS TO MEET SITE TOM",
+            "OMIT MOST TIES SEE IT MESS"
+        ],
+        unlock_criteria: { min_wpm: 7, min_accuracy: 85 }
+    },
+
+    // --- Phase 3: Add A, N ---
+    {
+        id: 5,
+        name: "Intro: A N",
+        sentences: ["A A A", "N N N", "ANNA", "MAN", "NAN", "ANT", "TEN TAN MEN", "NAME SAME ANNA"],
+        unlock_criteria: { min_wpm: 5, min_accuracy: 95 }
+    },
+    {
+        id: 6,
+        name: "Practice: E T I M S O A N",
+        sentences: [
+            "A MAN SENT ME TEN NOTES",
+            "ANNA AND SAM ATE NUTS MAN",
+            "ANT MANATEE SENT ME ANNA SANE",
+            "SAME SITE SAME TIME NEXT MEAN", // Adjusted slightly
+            "MEN SET NETS NEAR TAN SAND",
+            "TEN ANTS ATE NINE TASTY MINT",
+            "MEAN MAN SENT ANNA TEN MATS",
+            "NAME THAT SAINT ANNA SENT ME",
+            "STEAM TRAIN SENT SMOKE TO EAST",
+            "NEAT SENTIMENTS MEAN SOMETHING TO ANNA"
+        ],
+        unlock_criteria: { min_wpm: 8, min_accuracy: 85 }
+    },
+
+    // --- Phase 4: Add U, D, R ---
+    {
+        id: 7,
+        name: "Intro: U D R",
+        sentences: ["U U U", "D D D", "R R R", "DUD", "RUN", "RED", "RUDDER", "UNDER TRUE RED", "READ DAD RUN"],
+        unlock_criteria: { min_wpm: 6, min_accuracy: 95 }
+    },
+    {
+        id: 8,
+        name: "Practice: E T I M S O A N U D R",
+        sentences: [
+            "DUDES RUN UNDER DARK RED RUGS",
+            "TRUE READERS DATE RARE UNDERUSED DATES",
+            "OUR MAIDS DARE RUDE MAD MEN",
+            "READERS MUST RETURN RARE USED TEXTS",
+            "SEND MORE URGENT MESSAGES UNDER ROUTE",
+            "RED DRESSES AND RED ROSES NEAR",
+            "TURN AROUND AND SEE TRUE NORTH",
+            "DRUMS SOUND UNDER THE STAR DUST",
+            "RATS AND MICE RUN UNDER DOORS",
+            "URGENT DEMAND SENT DURING DARK RAIN"
+        ],
+        unlock_criteria: { min_wpm: 10, min_accuracy: 88 }
+    },
+
+    // --- Phase 5: Add K, G, W ---
+    {
+        id: 9,
+        name: "Intro: K G W",
+        sentences: ["K K K", "G G G", "W W W", "KING", "WAG", "GROW", "WORK KNOW GO", "WE GO WAG"],
+        unlock_criteria: { min_wpm: 6, min_accuracy: 95 }
+    },
+    {
+        id: 10,
+        name: "Practice: E T I M S O A N U D R K G W",
+        sentences: [
+            "WE KNOW GOOD WORKERS GROW KALE",
+            "KING KONG WAGS WIDE GREEN WINGS",
+            "GEESE WALK DARK WET GRASS KNOWINGLY",
+            "WORKERS KNOW KINGS GRANT WIDE RANGE",
+            "GREG KNEW WATER GOES DOWN WEST",
+            "WE GROW DARK GREEN KALE WEEKLY",
+            "TAKE WARM GOWNS DURING WINTER NIGHTS",
+            "WORK GROUPS KNOW WAGES GROWING WEEKLY",
+            "STRONG WINDS WOKE KING GREGORY KNOWING",
+            "GOATS KNOW GREEN GRASS GROWS WESTWARD"
+        ],
+        unlock_criteria: { min_wpm: 11, min_accuracy: 90 }
+    },
+
+    // --- Phase 6: Add B, H, V ---
+    {
+        id: 11,
+        name: "Intro: B H V",
+        sentences: ["B B B", "H H H", "V V V", "BOB", "HAVE", "VAN", "BEHAVE VERY", "BIG HUB BOUGHT"],
+        unlock_criteria: { min_wpm: 7, min_accuracy: 95 }
+    },
+    {
+        id: 12,
+        name: "Practice: E T I M S O A N U D R K G W B H V",
+        sentences: [
+            "BRAVE HUBBY BOUGHT VERY HEAVY BOOTS",
+            "HAVE BOTH BOYS VISITED BIG VANS", // Corrected typo
+            "BEHAVE BETTER BOYS HAVE VERY HIGH",
+            "HER BROTHER HAS VISITED BIG BEN",
+            "BRAVE MEN HAVE VERY HIGH HOPES",
+            "HEAVY VIBRATIONS SHOOK BOTH BLUE BOATS",
+            "BOB VISITED HIS BRAVE BROTHER THRICE",
+            "HAVE THEM BRING BOTH HEAVY VASES",
+            "HER BEST HABIT INVOLVES BRIGHT BEHAVIOR",
+            "BOTH VANS HAVE VERY BIG BRAKES"
+        ],
+        unlock_criteria: { min_wpm: 12, min_accuracy: 90 }
+    },
+
+    // --- Phase 7: Add F, L, P ---
+    {
+        id: 13,
+        name: "Intro: F L P",
+        sentences: ["F F F", "L L L", "P P P", "FILL", "LAP", "POP", "FULL FLAP PULL", "PEOPLE LEFT FIELD"],
+        unlock_criteria: { min_wpm: 7, min_accuracy: 95 }
+    },
+    {
+        id: 14,
+        name: "Practice: E T I M S O A N U D R K G W B H V F L P",
+        sentences: [
+            "FEW PEOPLE FOLLOW PLANS FOR FULL",
+            "FLUFFY LAP DOGS LAPPED PLENTY FLUID",
+            "PLEASE FILL LARGE FLAPS FOR PEOPLE",
+            "FLYING FISH FLOPPED FREELY PAST PIER",
+            "FATHER LEFT FIELD TRIP PLANS FALL",
+            "FILL PAPER PAILS FULL FOR PLANTING",
+            "FLUFFY PILLOWS HELP PEOPLE FALL FAST",
+            "FRANK FOUND FOUR LARGE PURPLE FLOWERS",
+            "PEOPLE OFTEN FEEL FULL FOLLOWING LUNCH",
+            "PHILIP LEFT FLASHLIGHT PLUS FULL PACK"
+        ],
+        unlock_criteria: { min_wpm: 13, min_accuracy: 92 }
+    },
+
+    // --- Phase 8: Add J, Q, X, Y, Z ---
+    {
+        id: 15,
+        name: "Intro: J Q X Y Z",
+        sentences: ["J J J", "Q Q Q", "X X X", "Y Y Y", "Z Z Z", "JAZZ QUIZ", "XYLO ZOO", "JUMP QUICKLY"],
+        unlock_criteria: { min_wpm: 7, min_accuracy: 95 }
+    },
+    {
+        id: 16,
+        name: "Practice: All Letters",
+        sentences: [
+            "JAZZY QUILTS EXCITED MY PLUCKY ZEBRA",
+            "QUICK JAB FOX JUMPS OVER LAZY",
+            "ZEBRAS JOG EXACTLY BY MY QUIET",
+            "JULY JOYFULLY BRINGS EXTRA JAZZY QUIZZES",
+            "FIX MY ZIPPERS QUICKLY JUST YESTERDAY",
+            "QUEEN JAYNE EXPLORED SIXTY HAZY VALLEYS",
+            "BOX JELLYFISH MAY JOLT YOUR QUIET",
+            "EXPECT MAJOR QUIZZES BY JULY NEXT",
+            "WHY DID JAY FIX SIXTY QUAIL?",
+            "CRAZY FOXES JUMP QUICKLY BY ZOO"
+        ],
+        unlock_criteria: { min_wpm: 14, min_accuracy: 92 }
+    },
+    {
+        id: 17,
+        name: "Consolidation: Full Alphabet",
+        sentences: [
+            "THE QUICK BROWN FOX JUMPS OVER",
+            "FIVE BOXING WIZARDS JUMP QUICKLY TODAY",
+            "PACK MY BOX WITH FIVE DOZEN",
+            "JACKDAWS LOVE MY BIG SPHINX OF", // Standard pangrams
+            "HOW QUICKLY DAFT JUMPING ZEBRAS VEX",
+            "BRIGHT VIXENS JUMP FOR JOYFUL ZEBRAS",
+            "MY EXTREMELY PLUCKY ZEBRA JUST QUIT",
+            "WALTZ NYMPH FOR QUICK JIGS VEX BED", // Adjusted pangram
+            "QUIETLY EXPLORE JUNGLE BY HAZY FJORDS",
+            "VOX QUIZ JUMPED FORTH BY WACKY" // Adjusted
+        ],
+        unlock_criteria: { min_wpm: 15, min_accuracy: 93 }
+    },
+
+    // --- Phase 9: Add Numbers ---
+    {
+        id: 18,
+        name: "Intro: Numbers 0-9",
+        sentences: ["0 0", "1 1", "2 2", "3 3", "4 4", "5 5", "6 6", "7 7", "8 8", "9 9", "123 456 7890"],
+        unlock_criteria: { min_wpm: 8, min_accuracy: 95 }
+    },
+    {
+        id: 19,
+        name: "Practice: Letters & Numbers",
+        sentences: [
+            "BUY 10 APPLES AND 25 PEARS",
+            "FLIGHT 370 ARRIVES AT GATE 9",
+            "SEND 100 OR 200 UNITS NOW",
+            "MY PHONE NUMBER IS 555 1234",
+            "WE NEED 6 BOARDS 8 FEET LONG", // Added word
+            "ORDER 7 PIZZAS FOR 45 PEOPLE",
+            "THE YEAR IS 2025 RIGHT NOW", // Updated year
+            "MEET AT 1600 HOURS AT POINT 7",
+            "SHIPMENT 987 HAS JUST LEFT PORT",
+            "COUNT FROM 0 TO 9 VERY SLOWLY"
+        ],
+        unlock_criteria: { min_wpm: 15, min_accuracy: 94 }
+    },
+
+    // --- Phase 10: Add Punctuation ---
+    {
+        id: 20,
+        name: "Intro: Punctuation . , ?",
+        sentences: [". . .", ", , ,", "? ? ?", "STOP .", "WAIT , WAIT", "REALLY ?", "OK. YES, REALLY?"],
+        unlock_criteria: { min_wpm: 8, min_accuracy: 95 }
+    },
+    {
+        id: 21,
+        name: "Practice: All Characters",
+        sentences: [
+            "IS THE TIME 1430 HOURS YET?",
+            "STOP . SEND HELP VIA ROUTE 66 .", // Added period
+            "YES , WE HAVE THE PLANS , OKAY?",
+            "RAIN IS EXPECTED . BRING JACKETS , HATS .",
+            "WHAT IS YOUR NAME , RANK , NUMBER?",
+            "ORDER CONFIRMED . REF 123A , DUE TUE .",
+            "QUERY RECEIVED , REPLY PENDING . CODE 4?",
+            "CALL ME AT 555 0199 , EXT 40 . URGENT?",
+            "PRICE IS 99 . 50 , TAX 7 . 25 . OK?", // Simple price format
+            "FINAL LEVEL COMPLETE . WELL DONE , OPERATOR ?"
+        ],
+        unlock_criteria: { min_wpm: 16, min_accuracy: 95 } // Final level goal
+    }
 ];
+
+// You can now use this LEVELS_DATA array in your JavaScript application.
+// console.log(JSON.stringify(LEVELS_DATA, null, 2)); // Optional: Print formatted JSON
 
 // --- Audio Configuration ---
 const AUDIO_DEFAULT_TONE_FREQUENCY = 600; // Default frequency in Hz

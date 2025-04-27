@@ -1,8 +1,10 @@
+/* In file: js/modal.js */
 /**
  * js/modal.js
  * -----------
  * Handles basic modal functionality including showing, hiding,
- * and simple drag-and-drop for the modal window. Fixes drag start jump.
+ * and simple drag-and-drop for the modal window.
+ * Refines drag start logic for smoother interaction.
  */
 
 class Modal {
@@ -24,12 +26,12 @@ class Modal {
         this.onClose = onClose;
 
         this.isDragging = false;
-        // Use startX/startY relative to viewport for calculations
-        this.startX = 0;
-        this.startY = 0;
         // Store initial offset from top-left corner of modal to mouse pointer
         this.offsetX = 0;
         this.offsetY = 0;
+        // Store initial modal position to avoid recalculating bounds constantly
+        this.initialModalX = 0;
+        this.initialModalY = 0;
 
         if (!this.modalElement || !this.openButton || !this.closeButton || !this.headerElement) {
             console.error("Modal initialization failed: One or more elements not found.");
@@ -57,6 +59,13 @@ class Modal {
         this.headerElement.addEventListener('mousedown', this._dragStart.bind(this));
         document.addEventListener('mousemove', this._drag.bind(this));
         document.addEventListener('mouseup', this._dragEnd.bind(this));
+        // Prevent mouse drag interfering with text selection inside modal
+        this.modalElement.addEventListener('mousedown', (e) => {
+             if (e.target !== this.headerElement && !this.headerElement.contains(e.target)) {
+                 e.stopPropagation(); // Prevent drag start if clicking inside content
+             }
+        });
+
 
         // Touch events
         this.headerElement.addEventListener('touchstart', this._dragStart.bind(this), { passive: false });
@@ -65,17 +74,18 @@ class Modal {
     }
 
      /**
-     * Sets the initial position (centered) if not already set.
+     * Sets the initial position (centered) if not already set by dragging.
+     * Ensures transform is cleared if position was set manually.
      * @private
      */
      _setInitialPosition() {
-         // Only apply transform if position is not explicitly set
-         if (!this.modalElement.style.top && !this.modalElement.style.left) {
+         // Only center using transform if left/top are not set by dragging
+         if (!this.modalElement.style.left && !this.modalElement.style.top) {
             this.modalElement.style.left = '50%';
             this.modalElement.style.top = '50%';
             this.modalElement.style.transform = 'translate(-50%, -50%)';
          } else {
-            // Ensure transform is cleared if position was set by dragging
+             // If left/top *are* set (likely by dragging), ensure transform is removed
              this.modalElement.style.transform = '';
          }
      }
@@ -105,41 +115,53 @@ class Modal {
 
     /**
      * Handles the start of a drag operation (mousedown/touchstart).
+     * Uses pageX/pageY for more robust offset calculation.
      * @param {Event} e - The event object.
      * @private
      */
     _dragStart(e) {
+        // Ensure drag starts only on the header itself
         if (!(e.target === this.headerElement || this.headerElement.contains(e.target))) {
-            return; // Only drag by header
+            return;
         }
-
-        // Remove transform before getting position to avoid jump
-        this.modalElement.style.transform = '';
-        const rect = this.modalElement.getBoundingClientRect();
-
-        let pointerX, pointerY;
-        if (e.type === "touchstart") {
-            if (e.touches.length !== 1) return; // Only single touch drags
-            pointerX = e.touches[0].clientX;
-            pointerY = e.touches[0].clientY;
-            e.preventDefault(); // Prevent page scroll
-        } else {
-            pointerX = e.clientX;
-            pointerY = e.clientY;
-        }
-
-        // Calculate offset from modal's top-left to the pointer
-        this.offsetX = pointerX - rect.left;
-        this.offsetY = pointerY - rect.top;
-
-        // Set initial position directly using style.left/top
-        this.modalElement.style.left = `${rect.left}px`;
-        this.modalElement.style.top = `${rect.top}px`;
 
         this.isDragging = true;
         this.modalElement.style.cursor = 'grabbing';
-        this.headerElement.style.cursor = 'grabbing'; // Apply to header too
+        this.headerElement.style.cursor = 'grabbing';
+
+        let pointerX, pointerY;
+        if (e.type === "touchstart") {
+            if (e.touches.length !== 1) {
+                this._dragEnd(e); return;
+            }
+            pointerX = e.touches[0].pageX; // Use pageX for touch
+            pointerY = e.touches[0].pageY; // Use pageY for touch
+            e.preventDefault(); // Prevent page scroll only during touch drag
+        } else {
+            pointerX = e.pageX; // Use pageX for mouse
+            pointerY = e.pageY; // Use pageY for mouse
+        }
+
+        // --- Refined Offset Calculation ---
+        // Remove transform to work with pixel values
+        this.modalElement.style.transform = '';
+
+        // Get the current pixel position
+        const rect = this.modalElement.getBoundingClientRect();
+        // Convert viewport-relative rect.left/top to document-relative positions
+        this.initialModalX = rect.left + window.scrollX;
+        this.initialModalY = rect.top + window.scrollY;
+
+        // Calculate offset from the modal's document-relative top-left corner to the pointer
+        this.offsetX = pointerX - this.initialModalX;
+        this.offsetY = pointerY - this.initialModalY;
+
+        // Set position explicitly using pixels to fix the jump
+        this.modalElement.style.left = `${this.initialModalX}px`;
+        this.modalElement.style.top = `${this.initialModalY}px`;
+        // --- End Refinement ---
     }
+
 
     /**
      * Handles the drag movement (mousemove/touchmove).
@@ -149,27 +171,38 @@ class Modal {
     _drag(e) {
         if (!this.isDragging) return;
 
-        e.preventDefault(); // Prevent selection/scrolling
+        // Prevent default actions like text selection during mouse drag
+        if (e.type === "mousemove") {
+            e.preventDefault();
+        }
 
         let pointerX, pointerY;
         if (e.type === "touchmove") {
-             if (e.touches.length !== 1) { this._dragEnd(e); return; } // End drag if multi-touch
-             pointerX = e.touches[0].clientX;
-             pointerY = e.touches[0].clientY;
+             if (e.touches.length !== 1) {
+                 this._dragEnd(e); return;
+             }
+             pointerX = e.touches[0].pageX; // Use pageX for touch
+             pointerY = e.touches[0].pageY; // Use pageY for touch
+             // preventDefault is handled in dragStart for touch
         } else {
-            pointerX = e.clientX;
-            pointerY = e.clientY;
+            pointerX = e.pageX; // Use pageX for mouse
+            pointerY = e.pageY; // Use pageY for mouse
         }
 
-        // Calculate new top-left corner position
+        // Calculate new top-left corner position based on pointer and initial offset
         let newX = pointerX - this.offsetX;
         let newY = pointerY - this.offsetY;
 
-        // Optional: Basic boundary check
-        const maxX = window.innerWidth - this.modalElement.offsetWidth;
-        const maxY = window.innerHeight - this.modalElement.offsetHeight;
-        newX = Math.max(0, Math.min(newX, maxX));
-        newY = Math.max(0, Math.min(newY, maxY));
+        // Basic boundary check relative to viewport size and scroll position
+        const modalWidth = this.modalElement.offsetWidth;
+        const modalHeight = this.modalElement.offsetHeight;
+        const minX = window.scrollX;
+        const minY = window.scrollY;
+        const maxX = window.innerWidth + window.scrollX - modalWidth;
+        const maxY = window.innerHeight + window.scrollY - modalHeight;
+
+        newX = Math.max(minX, Math.min(newX, maxX));
+        newY = Math.max(minY, Math.min(newY, maxY));
 
         this._setPosition(newX, newY);
     }
@@ -184,12 +217,11 @@ class Modal {
              this.isDragging = false;
              this.modalElement.style.cursor = ''; // Reset cursor
              this.headerElement.style.cursor = 'move'; // Reset header cursor
-             // Keep position set by style.left/top, don't re-apply transform
          }
     }
 
     /**
-     * Sets the position of the modal element using left/top.
+     * Sets the position of the modal element using left/top styles.
      * @param {number} xPos - The target X coordinate (px).
      * @param {number} yPos - The target Y coordinate (px).
      * @private

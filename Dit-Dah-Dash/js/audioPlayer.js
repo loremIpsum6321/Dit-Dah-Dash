@@ -4,6 +4,7 @@
  * Handles audio feedback and Morse sequence playback using the Web Audio API.
  * Allows adjustment of WPM and tone frequency. Plays discrete tones based on timing.
  * Includes fixes for feedback sounds and paddle input cancellation.
+ * Correct sound is now disabled.
  */
 
 class AudioPlayer {
@@ -28,7 +29,7 @@ class AudioPlayer {
 
         // Playback state
         this.playbackNodes = []; // Stores { osc, gain } for sequence playback
-        this.feedbackNodes = []; // Stores { osc, gain } for feedback sounds (correct/incorrect)
+        this.feedbackNodes = []; // Stores { osc, gain } for feedback sounds (incorrect only now)
         this.inputToneNode = null; // Stores { osc, gain, type: 'dit'|'dah' } for the *currently playing* input paddle tone
         this.playbackCompletionTimeoutId = null;
         this.isCurrentlyPlayingBack = false;
@@ -276,10 +277,11 @@ class AudioPlayer {
                  currentDuration = 0;
                  gapDuration = this.intraCharGapSec;
             } else {
-                 return;
+                 return; // Skip unknown elements
             }
 
              scheduledTime += currentDuration;
+             // Add gap *after* the element (if element had duration) or use specific gap duration
              scheduledTime += gapDuration;
 
         });
@@ -294,7 +296,7 @@ class AudioPlayer {
                  window.morseGameState.status = GameStatus.PLAYBACK_INPUT;
              }
             if (onComplete) onComplete();
-        }, totalDurationMs + 150);
+        }, totalDurationMs + 150); // Add a small buffer
     }
 
     /**
@@ -314,16 +316,16 @@ class AudioPlayer {
                 try {
                     if (gain?.gain) {
                         gain.gain.cancelScheduledValues(now);
-                        gain.gain.setValueAtTime(gain.gain.value, now);
-                        gain.gain.linearRampToValueAtTime(0, now + this.rampTime);
+                        gain.gain.setValueAtTime(gain.gain.value, now); // Hold current gain
+                        gain.gain.linearRampToValueAtTime(0, now + this.rampTime); // Ramp down
                     }
                     if (osc) {
-                        osc.stop(now + this.rampTime + 0.01);
-                        osc.onended = () => { try { osc.disconnect(); gain?.disconnect(); } catch(e){} };
+                        osc.stop(now + this.rampTime + 0.01); // Stop after ramp
+                        osc.onended = () => { try { osc.disconnect(); gain?.disconnect(); } catch(e){} }; // Cleanup
                     }
                 } catch (e) {
                     console.warn("Error stopping audio node during playback cancellation:", e);
-                    try { osc?.disconnect(); gain?.disconnect(); } catch(e2){}
+                    try { osc?.disconnect(); gain?.disconnect(); } catch(e2){} // Ensure disconnect
                 }
             });
             this.playbackNodes = [];
@@ -331,6 +333,7 @@ class AudioPlayer {
 
          if (this.isCurrentlyPlayingBack) {
              this.isCurrentlyPlayingBack = false;
+             // Restore state if playback was interrupted
              if (window.morseGameState && window.morseGameState.status === GameStatus.PLAYING_BACK) {
                   window.morseGameState.status = GameStatus.PLAYBACK_INPUT;
               }
@@ -364,13 +367,22 @@ class AudioPlayer {
          }
      }
 
-    /** Plays a short, higher-pitched sound for correct feedback. */
+    /** Plays a short, higher-pitched sound for correct feedback. (DEACTIVATED) */
     playCorrectSound() {
-        this._playFeedbackSound(this.toneFrequency * 1.5, 0.05);
+        // --- Deactivated ---
+        // console.log("playCorrectSound called but is deactivated.");
+        // Original code: this._playFeedbackSound(this.toneFrequency * 1.5, 0.05);
+        return; // Do nothing
     }
 
     /** Plays a slightly longer, lower-pitched sound for incorrect feedback. */
     playIncorrectSound() {
+        // Check if an input tone or playback is currently active
+        if (this.inputToneNode || this.isCurrentlyPlayingBack) {
+            console.warn("Cannot play incorrect sound while another sound is active.");
+            return;
+        }
+
         this._playFeedbackSound(this.toneFrequency * 0.7, 0.1);
     }
 
@@ -392,10 +404,10 @@ class AudioPlayer {
             const now = this.audioContext.currentTime;
             const osc = this.audioContext.createOscillator();
             const gain = this.audioContext.createGain();
-            osc.type = 'triangle';
+            osc.type = 'triangle'; // Use triangle for a slightly different timbre
             osc.frequency.setValueAtTime(frequency, now);
 
-            const feedbackGainLevel = 0.5;
+            const feedbackGainLevel = 0.5; // Adjust volume if needed
             gain.gain.setValueAtTime(0, now);
             gain.gain.linearRampToValueAtTime(feedbackGainLevel, now + this.rampTime);
             gain.gain.setValueAtTime(feedbackGainLevel, now + durationSeconds - this.rampTime);
@@ -405,14 +417,14 @@ class AudioPlayer {
             gain.connect(this.masterGainNode);
 
             osc.start(now);
-            osc.stop(now + durationSeconds + this.rampTime + 0.01);
+            osc.stop(now + durationSeconds + this.rampTime + 0.01); // Stop slightly after ramp
 
             const nodeRef = { osc, gain };
             this.feedbackNodes.push(nodeRef);
 
             osc.onended = () => {
                 this.feedbackNodes = this.feedbackNodes.filter(n => n !== nodeRef);
-                try { osc.disconnect(); gain.disconnect(); } catch(e){}
+                try { osc.disconnect(); gain.disconnect(); } catch(e){} // Cleanup
             };
         } catch (error) {
             console.error("Error playing feedback sound:", error);

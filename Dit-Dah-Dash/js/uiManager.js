@@ -1,9 +1,11 @@
+/* In file: js/uiManager.js */
 /**
  * js/uiManager.js
  * ---------------
  * Handles DOM interactions, UI visibility, displays updates, modal settings UI,
  * themes, event listeners, and results screen management including star rating
  * and paddle label changes.
+ * Includes fixes for fixed cursor/scrolling text and correct input feedback.
  */
 
 class UIManager {
@@ -101,7 +103,7 @@ class UIManager {
         this.isDarkModeEnabled = false;
         this.isHintVisible = MorseConfig.HINT_DEFAULT_VISIBLE;
         this._incorrectFlashTimeout = null;
-        this._feedbackTimeout = null;
+        this._feedbackTimeout = null; // Shared timeout for correct/incorrect pattern flash
         this.ditSvgString = `<svg class="pattern-dit" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg"><circle cx="25" cy="25" r="15" /></svg>`;
         this.dahSvgString = `<svg class="pattern-dah" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="20" width="30" height="10" rx="3"/></svg>`;
 
@@ -274,13 +276,214 @@ class UIManager {
     updateUserPatternDisplay(morseSequence) { if (!this.userPatternContainer) return; this.userPatternContainer.innerHTML = ''; if (morseSequence) morseSequence.split('').forEach(el => { if (el === '.' || el === '-') this.userPatternContainer.innerHTML += this._createPatternSvg(el); }); }
     updatePlaybackMorseDisplay(formattedMorse) { if (this.playbackMorseDisplay) this.playbackMorseDisplay.textContent = formattedMorse || '\u00A0'; }
     updateSandboxMorsePreview(formattedMorse) { if (this.sandboxMorsePreview) this.sandboxMorsePreview.textContent = formattedMorse || '\u00A0'; }
-    setPatternDisplayState(state) { if (!this.targetPatternContainer || !this.userPatternContainer) return; if (this._feedbackTimeout) clearTimeout(this._feedbackTimeout); const containers = [this.targetPatternContainer, this.userPatternContainer]; containers.forEach(c => c.classList.remove('correct-pattern', 'incorrect-pattern')); if (state === 'correct' || state === 'incorrect') { const className = state === 'correct' ? 'correct-pattern' : 'incorrect-pattern'; containers.forEach(c => c.classList.add(className)); this._feedbackTimeout = setTimeout(() => { containers.forEach(c => c.classList.remove(className)); this._feedbackTimeout = null; }, MorseConfig.INCORRECT_FLASH_DURATION); } }
-    renderSentence(sentence) { if (!this.textDisplay || !this.textDisplayWrapper) return; this.textDisplay.innerHTML = ''; this.textDisplay.style.fontSize = ''; this.textDisplayWrapper.scrollLeft = 0; if (sentence) { sentence.split('').forEach((char, index) => { const span = document.createElement('span'); span.textContent = char; span.classList.add('char', 'pending'); span.dataset.index = index; if (char === ' ') span.classList.add('space'); this.textDisplay.appendChild(span); }); } this.resetCharacterStyles(); this.updateUserPatternDisplay(""); this.setPatternDisplayState('default'); this._adjustTextDisplayFontSize(); }
-    _adjustTextDisplayFontSize() { const element = this.textDisplay; const container = this.textDisplayWrapper; if (!element || !container || !element.textContent) { if(element) element.style.fontSize = ''; return; } element.style.fontSize = ''; let currentFontSize = parseFloat(window.getComputedStyle(element).fontSize); const minFontSize = 10; let iterations = 0; const maxIterations = 100; while (element.scrollHeight > container.clientHeight && currentFontSize > minFontSize && iterations < maxIterations) { currentFontSize *= 0.95; element.style.fontSize = `${currentFontSize}px`; iterations++; } if (iterations >= maxIterations) console.warn("Max font size adjustment iterations reached."); }
-    resetCharacterStyles() { this.textDisplay?.querySelectorAll('.char').forEach(span => { span.className = 'char pending'; if (span.textContent === ' ') span.classList.add('space'); }); }
-    updateCharacterState(charIndex, state) { const charSpan = this.textDisplay?.querySelector(`.char[data-index="${charIndex}"]`); if (charSpan) { charSpan.classList.remove('pending', 'current', 'completed', 'incorrect'); charSpan.classList.add(state); if (state === 'incorrect') { if (this._incorrectFlashTimeout) clearTimeout(this._incorrectFlashTimeout); this._incorrectFlashTimeout = setTimeout(() => { if (charSpan.classList.contains('incorrect')) { charSpan.classList.remove('incorrect'); const currentGameState = window.morseGameState; if (currentGameState && currentGameState.currentCharIndex === charIndex && (currentGameState.isPlaying() || currentGameState.status === GameStatus.READY)) { charSpan.classList.add('current'); } else { charSpan.classList.add('pending'); } } this._incorrectFlashTimeout = null; }, MorseConfig.INCORRECT_FLASH_DURATION); } else if (this._incorrectFlashTimeout && charSpan.classList.contains('incorrect')) { clearTimeout(this._incorrectFlashTimeout); this._incorrectFlashTimeout = null; } if (state === 'current') this._centerCurrentCharacterHorizontally(charSpan); } }
-    highlightCharacter(currentIdx, targetChar) { const prevSpan = this.textDisplay?.querySelector('.char.current'); if (prevSpan && prevSpan.dataset.index != currentIdx) { if (!prevSpan.classList.contains('incorrect') && !prevSpan.classList.contains('completed')) { prevSpan.classList.remove('current'); prevSpan.classList.add('pending'); } else { prevSpan.classList.remove('current'); } } this.updateCharacterState(currentIdx, 'current'); if (window.morseDecoder) { const morseSequence = window.morseDecoder.encodeCharacter(targetChar); this.updateTargetPatternDisplay(morseSequence ?? ""); } this.updateUserPatternDisplay(""); this.setPatternDisplayState('default'); }
-    _centerCurrentCharacterHorizontally(element) { const container = this.textDisplayWrapper; if (!container || !element) return; requestAnimationFrame(() => { const currentElement = this.textDisplay?.querySelector(`.char[data-index="${element.dataset.index}"]`); if (!currentElement) return; const containerRect = container.getBoundingClientRect(); const elementRect = currentElement.getBoundingClientRect(); const elementWidth = elementRect.width; const elementCenterRelativeToWrapper = (elementRect.left - containerRect.left) + (elementWidth / 2); const scrollAdjustment = elementCenterRelativeToWrapper - (containerRect.width / 2); let targetScrollLeft = container.scrollLeft + scrollAdjustment; const maxScrollLeft = container.scrollWidth - containerRect.width; targetScrollLeft = Math.max(0, Math.min(targetScrollLeft, maxScrollLeft)); if (Math.abs(container.scrollLeft - targetScrollLeft) > 1) { container.scrollTo({ left: targetScrollLeft, behavior: 'instant' }); } }); }
+
+    /**
+     * Sets the visual state (default, correct, incorrect) for the pattern containers.
+     * @param {'default' | 'correct' | 'incorrect'} state - The state to apply.
+     */
+    setPatternDisplayState(state) {
+        if (!this.targetPatternContainer || !this.userPatternContainer) return;
+        if (this._feedbackTimeout) clearTimeout(this._feedbackTimeout);
+
+        const containers = [this.targetPatternContainer, this.userPatternContainer];
+        // Remove previous states
+        containers.forEach(c => c.classList.remove('correct-pattern', 'incorrect-pattern'));
+
+        if (state === 'correct' || state === 'incorrect') {
+            const className = state === 'correct' ? 'correct-pattern' : 'incorrect-pattern';
+            // Apply the new state class
+            containers.forEach(c => c.classList.add(className));
+
+            // Set a timeout to revert to default state
+            this._feedbackTimeout = setTimeout(() => {
+                containers.forEach(c => c.classList.remove(className));
+                this._feedbackTimeout = null;
+            }, MorseConfig.INCORRECT_FLASH_DURATION); // Use the same duration for both
+        }
+    }
+
+    /**
+     * Renders the sentence text into the display area.
+     * @param {string} sentence - The sentence text.
+     */
+    renderSentence(sentence) {
+        if (!this.textDisplay || !this.textDisplayWrapper) return;
+        this.textDisplay.innerHTML = '';
+        this.textDisplay.style.fontSize = ''; // Reset font size before adding content
+        this.textDisplay.style.transform = 'translateX(0px)'; // Reset transform for centering logic
+        this.textDisplayWrapper.scrollLeft = 0; // Reset scroll position
+
+        if (sentence) {
+            sentence.split('').forEach((char, index) => {
+                const span = document.createElement('span');
+                span.textContent = char;
+                span.classList.add('char', 'pending');
+                span.dataset.index = index;
+                if (char === ' ') span.classList.add('space');
+                this.textDisplay.appendChild(span);
+            });
+        }
+        this.resetCharacterStyles(); // Ensure all are pending
+        this.updateUserPatternDisplay(""); // Clear user input
+        this.setPatternDisplayState('default'); // Reset pattern feedback
+        this._adjustTextDisplayFontSize(); // Adjust font size based on new content
+    }
+
+    /**
+     * Adjusts the font size of the text display to fit vertically.
+     * @private
+     */
+    _adjustTextDisplayFontSize() {
+        const element = this.textDisplay;
+        const container = this.textDisplayWrapper;
+        if (!element || !container || !element.textContent) {
+            if(element) element.style.fontSize = ''; // Reset if empty
+            return;
+        }
+
+        element.style.fontSize = ''; // Reset to base size
+        let currentFontSize = parseFloat(window.getComputedStyle(element).fontSize);
+        const minFontSize = 10; // Minimum font size
+        let iterations = 0;
+        const maxIterations = 100; // Prevent infinite loops
+
+        // Shrink font size until it fits vertically
+        while (element.scrollHeight > container.clientHeight && currentFontSize > minFontSize && iterations < maxIterations) {
+            currentFontSize *= 0.95; // Reduce font size by 5%
+            element.style.fontSize = `${currentFontSize}px`;
+            iterations++;
+        }
+        if (iterations >= maxIterations) console.warn("Max font size adjustment iterations reached.");
+    }
+
+    /** Resets all character spans to the 'pending' state. */
+    resetCharacterStyles() {
+        this.textDisplay?.querySelectorAll('.char').forEach(span => {
+            span.className = 'char pending'; // Base classes
+            if (span.textContent === ' ') span.classList.add('space');
+        });
+    }
+
+    /**
+     * Updates the visual state of a specific character span.
+     * Handles correct, incorrect (with flash), pending, and current states.
+     * @param {number} charIndex - The index of the character to update.
+     * @param {'pending' | 'current' | 'completed' | 'incorrect'} state - The new state.
+     */
+    updateCharacterState(charIndex, state) {
+        const charSpan = this.textDisplay?.querySelector(`.char[data-index="${charIndex}"]`);
+        if (charSpan) {
+            // Clear existing state classes (except base 'char' and 'space')
+            charSpan.classList.remove('pending', 'current', 'completed', 'incorrect');
+            // Add the new state class
+            charSpan.classList.add(state);
+
+            // Handle incorrect flash timeout
+            if (state === 'incorrect') {
+                if (this._incorrectFlashTimeout) clearTimeout(this._incorrectFlashTimeout);
+                this._incorrectFlashTimeout = setTimeout(() => {
+                    // Only revert if it's *still* incorrect (might have been corrected quickly)
+                    if (charSpan.classList.contains('incorrect')) {
+                        charSpan.classList.remove('incorrect');
+                        // Decide which state to revert to (usually current or pending)
+                        const currentGameState = window.morseGameState; // Check game state
+                        if (currentGameState && currentGameState.currentCharIndex === charIndex &&
+                            (currentGameState.isPlaying() || currentGameState.status === GameStatus.READY)) {
+                            charSpan.classList.add('current'); // Revert to current if still the target
+                        } else {
+                            charSpan.classList.add('pending'); // Otherwise, revert to pending
+                        }
+                    }
+                    this._incorrectFlashTimeout = null;
+                }, MorseConfig.INCORRECT_FLASH_DURATION);
+            } else if (this._incorrectFlashTimeout && charSpan.classList.contains('incorrect')) {
+                // If state changes *from* incorrect before timeout, clear the timeout
+                clearTimeout(this._incorrectFlashTimeout);
+                this._incorrectFlashTimeout = null;
+            }
+
+            // Center the character if it becomes the current one
+            if (state === 'current') {
+                this._centerCurrentCharacterHorizontally(charSpan);
+            }
+        }
+    }
+
+    /**
+     * Highlights the next character, updates the target pattern, and clears user input.
+     * @param {number} currentIdx - The index of the character to highlight.
+     * @param {string} targetChar - The actual character to highlight (raw case).
+     */
+    highlightCharacter(currentIdx, targetChar) {
+        // Remove 'current' from previously highlighted span
+        const prevSpan = this.textDisplay?.querySelector('.char.current');
+        if (prevSpan && prevSpan.dataset.index != currentIdx) {
+            // Check if previous was completed or incorrect to avoid reverting state
+            if (!prevSpan.classList.contains('incorrect') && !prevSpan.classList.contains('completed')) {
+                prevSpan.classList.remove('current');
+                prevSpan.classList.add('pending'); // Revert to pending if not error/complete
+            } else {
+                prevSpan.classList.remove('current'); // Just remove current if it was already done/error
+            }
+        }
+
+        // Update the state of the new current character (this also centers it)
+        this.updateCharacterState(currentIdx, 'current');
+
+        // Update the target Morse pattern display
+        if (window.morseDecoder) {
+            const morseSequence = window.morseDecoder.encodeCharacter(targetChar);
+            this.updateTargetPatternDisplay(morseSequence ?? ""); // Show Morse or clear if null
+        }
+
+        // Clear the user's input pattern display
+        this.updateUserPatternDisplay("");
+        this.setPatternDisplayState('default'); // Reset pattern feedback
+    }
+
+    /**
+     * Scrolls the text display wrapper horizontally to keep the current character centered.
+     * @param {HTMLElement} element - The currently highlighted character span.
+     * @private
+     */
+    _centerCurrentCharacterHorizontally(element) {
+        const container = this.textDisplayWrapper;
+        const textDisplay = this.textDisplay;
+        if (!container || !element || !textDisplay) return;
+
+        requestAnimationFrame(() => {
+            // Re-query the element in case the DOM updated
+            const currentElement = textDisplay.querySelector(`.char[data-index="${element.dataset.index}"]`);
+            if (!currentElement) return;
+
+            const containerRect = container.getBoundingClientRect();
+            const elementRect = currentElement.getBoundingClientRect();
+
+            // Calculate the horizontal center of the container
+            const containerCenter = containerRect.left + containerRect.width / 2;
+
+            // Calculate the horizontal center of the target element
+            const elementCenter = elementRect.left + elementRect.width / 2;
+
+            // Calculate the difference - how much we need to shift the *container's scroll*
+            const scrollAdjustment = elementCenter - containerCenter;
+
+            // Calculate the new target scrollLeft position
+            let targetScrollLeft = container.scrollLeft + scrollAdjustment;
+
+            // Clamp the scroll position to valid bounds
+            const maxScrollLeft = container.scrollWidth - containerRect.width;
+            targetScrollLeft = Math.max(0, Math.min(targetScrollLeft, maxScrollLeft));
+
+            // Scroll smoothly if the adjustment is significant enough
+            if (Math.abs(container.scrollLeft - targetScrollLeft) > 1) {
+                container.scrollTo({
+                    left: targetScrollLeft,
+                    behavior: 'smooth' // Use smooth scrolling
+                });
+            }
+        });
+    }
 
     // --- Stat Updates ---
     updateTimer(elapsedTimeMs) { const totalSeconds = Math.floor(elapsedTimeMs / 1000); const minutes = Math.floor(totalSeconds / 60); const seconds = totalSeconds % 60; const milliseconds = Math.floor((elapsedTimeMs % 1000) / 100); const formattedTime = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(milliseconds)}`; if (this.timerDisplay) this.timerDisplay.textContent = `Time: ${formattedTime}`; }
@@ -373,7 +576,16 @@ class UIManager {
 
         // Resize handler
         let resizeTimeout;
-        window.addEventListener('resize', () => { clearTimeout(resizeTimeout); resizeTimeout = setTimeout(() => { const currentSpan = this.textDisplay?.querySelector('.char.current'); this._adjustTextDisplayFontSize(); if (currentSpan) { this._centerCurrentCharacterHorizontally(currentSpan); } }, 150); });
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                const currentSpan = this.textDisplay?.querySelector('.char.current');
+                this._adjustTextDisplayFontSize();
+                if (currentSpan) {
+                    this._centerCurrentCharacterHorizontally(currentSpan);
+                }
+            }, 150);
+        });
 
         console.log("UI Event Listeners Added.");
     }

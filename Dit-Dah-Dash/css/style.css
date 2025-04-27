@@ -1,8 +1,11 @@
+/* In file: css/style.css */
 /**
  * css/style.css
  * -------------
  * Styling for Dit-Dah-Dash application. Includes results mode adjustments
  * and styling for results paddles and star ratings.
+ * Updates pattern container width, text display size, and fixed cursor behavior.
+ * Further increases pattern container/SVG size.
  */
 
 /* --- Global Styles & Resets --- */
@@ -22,8 +25,8 @@
     --button-active-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
     --pattern-bg: #eeeeee;
     --pattern-svg-fill: #555555;
-    --pattern-correct-bg: #c8e6c9;
-    --pattern-correct-fill: #2e7d32;
+    --pattern-correct-bg: #c8e6c9; /* Green background for correct */
+    --pattern-correct-fill: #2e7d32; /* Darker green for correct SVG */
     --pattern-incorrect-bg: #ffcdd2;
     --pattern-incorrect-fill: #c62828;
     --text-display-wrapper-bg: #fdfdfd;
@@ -52,7 +55,6 @@
     --button-reset-hover-bg: #d5d5d5;
     --overlay-bg: rgba(255, 255, 255, 0.98);
     --overlay-shadow: 0 0 20px rgba(0,0,0,0.1);
-    /* Removed settings overlay styles, moved to modal.css */
     --level-button-bg: #e0e0e0;
     --level-button-color: #333;
     --level-button-hover-bg: #d5d5d5;
@@ -89,8 +91,8 @@
     --button-active-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
     --pattern-bg: #444444;
     --pattern-svg-fill: #bbbbbb;
-    --pattern-correct-bg: #388E3C;
-    --pattern-correct-fill: #c8e6c9;
+    --pattern-correct-bg: #388E3C; /* Dark green background for correct */
+    --pattern-correct-fill: #c8e6c9; /* Light green for correct SVG */
     --pattern-incorrect-bg: #D32F2F;
     --pattern-incorrect-fill: #ffcdd2;
     --text-display-wrapper-bg: #2a2a2a;
@@ -119,7 +121,6 @@
     --button-reset-hover-bg: #757575;
     --overlay-bg: rgba(40, 40, 40, 0.98);
     --overlay-shadow: 0 0 20px rgba(0,0,0,0.5);
-    /* Removed settings overlay styles, moved to modal.css */
     --level-button-bg: #616161;
     --level-button-color: #e0e0e0;
     --level-button-hover-bg: #757575;
@@ -187,7 +188,6 @@ html, body {
 .menu-nav-button:hover {
     background-color: var(--menu-nav-button-hover-bg);
 }
-.menu-nav-button.settings-back { top: 15px; left: 15px; } /* Style potentially redundant if modal closes itself */
 
 /* --- Game Mode UI Wrapper --- */
 #game-ui-wrapper { display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden; position: relative; }
@@ -227,7 +227,7 @@ html, body {
     transition: display 0s; /* Instant transition for display property */
 }
 #dit-button .paddle-svg { height: 30%; }
-#dah-button .paddle-svg { height: 45%; }
+#dah-button .paddle-svg { height: 45%; } /* Dah slightly taller */
 
 .paddle-label {
     font-size: 1.6em; /* Make label larger for results */
@@ -262,15 +262,28 @@ html, body {
 /* --- Text Display (Game Mode) --- */
 #text-display-wrapper {
     display: flex; align-items: center; flex-grow: 1;
-    padding: 10px 0; overflow-x: hidden; overflow-y: hidden; line-height: 1.3;
-    width: 100%; max-width: 95%; margin: 5px auto;
+    padding: 10px 0;
+    overflow-x: hidden; /* Disable user scrolling */
+    overflow-y: hidden; line-height: 1.3;
+    width: 100%; /* Take full width */
+    max-width: 98%; /* Small horizontal padding */
+    margin: 5px auto;
     border: var(--text-display-border); border-radius: 8px; background-color: var(--text-display-wrapper-bg);
     transition: background-color 0.3s ease, border-color 0.3s ease; position: relative;
+    /* Cursor indicates text is not directly interactable */
+    cursor: default;
 }
 #text-display {
-    font-size: 3.5em; white-space: nowrap; text-align: left;
-    width: max-content; max-width: none; padding-left: 50%;
-    vertical-align: middle;
+    font-size: 4em; /* Increase base font size slightly */
+    white-space: nowrap; text-align: left;
+    width: max-content; /* Allow text to determine width */
+    max-width: none; /* No max-width on the text itself */
+    /* Padding adds space so first/last chars can be centered */
+    padding-left: 50%;
+    padding-right: 50%;
+    /* vertical-align: middle; - less relevant with flex */
+    /* Centering is handled by JS scroll */
+    will-change: transform; /* Hint for smoother scrolling */
 }
 .char { display: inline-block; transition: background-color 0.2s ease, color 0.2s ease; border-radius: 3px; padding: 0 0.05em; margin: 0 0.02em; vertical-align: middle; }
 .char.pending { color: var(--char-pending-color); }
@@ -281,11 +294,41 @@ html, body {
 .char.space { display: inline-block; min-width: 0.4em; }
 
 /* --- Pattern Displays (Game Mode) --- */
-#target-pattern-outer-wrapper { position: relative; width: 80%; max-width: 400px; margin: 8px auto; flex-shrink: 0; }
-.pattern-container { width: 100%; min-height: 45px; padding: 5px 10px; background-color: var(--pattern-bg); border-radius: 8px; display: flex; justify-content: center; align-items: center; gap: 4px; transition: background-color 0.15s ease-in-out; }
-#user-pattern-container { margin: 8px auto; flex-shrink: 0; width: 80%; max-width: 400px; }
-.pattern-container svg { width: 20px; height: 20px; fill: var(--pattern-svg-fill); transition: fill 0.15s ease-in-out, visibility 0s; }
-.pattern-container svg.pattern-dah { width: 30px; }
+#target-pattern-outer-wrapper {
+    position: relative;
+    width: 95%; /* Further widen */
+    max-width: 550px; /* Further widen max */
+    margin: 10px auto; /* Increase margin slightly */
+    flex-shrink: 0;
+}
+.pattern-container {
+    width: 100%;
+    min-height: 55px; /* Increase min-height for larger SVGs */
+    padding: 8px 12px; /* Increase padding */
+    background-color: var(--pattern-bg);
+    border-radius: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 6px; /* Increase gap */
+    transition: background-color 0.15s ease-in-out;
+}
+#user-pattern-container {
+    margin: 10px auto; /* Increase margin slightly */
+    flex-shrink: 0;
+    width: 95%; /* Further widen */
+    max-width: 550px; /* Further widen max */
+}
+/* Increase SVG size */
+.pattern-container svg {
+    width: 28px;  /* Larger size */
+    height: 28px; /* Larger size */
+    fill: var(--pattern-svg-fill);
+    transition: fill 0.15s ease-in-out, visibility 0s;
+}
+.pattern-container svg.pattern-dah {
+    width: 42px; /* Larger size (maintain ratio) */
+}
 .pattern-container.correct-pattern { background-color: var(--pattern-correct-bg); }
 .pattern-container.correct-pattern svg { fill: var(--pattern-correct-fill); }
 .pattern-container.incorrect-pattern { background-color: var(--pattern-incorrect-bg); }
@@ -324,9 +367,6 @@ html, body {
 #start-sandbox-button:disabled { background-color: #cccccc; cursor: not-allowed; opacity: 0.7; }
 #playback-morse-display, #sandbox-morse-preview { font-family: 'Courier New', Courier, monospace; font-size: 1.1em; color: var(--playback-morse-color); margin-top: 10px; word-break: break-all; background-color: var(--playback-morse-bg); padding: 5px 10px; border-radius: 4px; max-width: 90%; min-height: 1.5em; transition: background-color 0.3s ease, color 0.3s ease; }
 
-/* --- Settings Styles removed --- */
-/* Settings styles are now in modal.css */
-
 /* --- Overlays (Main Menu, Results, Level Select) --- */
 .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: var(--overlay-bg); z-index: 20; display: flex; flex-direction: column; justify-content: flex-start; align-items: center; padding: 20px; padding-top: 50px; text-align: center; box-shadow: var(--overlay-shadow); overflow-y: auto; font-size: 1.4em; color: var(--text-color); transition: background-color 0.3s ease; position: relative; }
 .overlay h2 { margin-bottom: 20px; margin-top: 10px; color: var(--text-color); font-size: 1.8em; flex-shrink: 0; }
@@ -357,15 +397,31 @@ html, body {
 #level-list button.completed:hover:not(:disabled) { background-color: var(--level-completed-hover-bg); }
 #level-list button:disabled { pointer-events: none; }
 
+/* In file: css/style.css */
+
 /* Results Screen Specifics */
-#results-screen h2 { margin-bottom: 10px; }
+#results-screen {
+    overflow-y: hidden; /* Prevent vertical scrolling on the overlay */
+}
+
+#results-screen h2 {
+    margin-bottom: 10px;
+    overflow: hidden; /* Hide overflow on h2 */
+}
 #results-rating { margin-bottom: 15px; }
 #results-stats { margin-bottom: 10px; }
 #results-stats p { font-size: 1.2em; margin-bottom: 5px; }
 #level-unlock-message { color: var(--char-completed-color); font-weight: bold; margin-bottom: 15px; font-size: 1.1em; min-height: 1.4em; /* Reserve space */ }
-#results-screen .results-instructions { font-size: 1.0em; opacity: 0.8; margin-bottom: 10px;}
-#results-screen div:last-of-type { margin-top: 15px; } /* Spacing for bottom buttons */
-
+#results-screen .results-instructions {
+    font-size: 1.0em;
+    opacity: 0.8;
+    margin-bottom: 10px;
+    overflow: hidden; /* Hide overflow on instructions */
+}
+#results-screen div:last-of-type {
+    margin-top: 0px; /* Adjust margin as requested */
+    overflow: hidden; /* Hide overflow on the button container */
+} /* Spacing for bottom buttons */
 /* Star Rating */
 .star-rating {
     font-size: 2.5em; /* Adjust size */
@@ -391,10 +447,10 @@ html, body {
     #display-area { height: 58%; padding: 5px 10px; }
     #input-area { height: 42%; padding: 10px; gap: 10px; }
     #text-display-wrapper { max-width: 95%; margin: 3px auto; padding: 5px 0; line-height: 1.2; }
-    #target-pattern-outer-wrapper, #user-pattern-container { width: 90%; max-width: 280px; margin: 4px auto; }
-    .pattern-container { min-height: 30px; padding: 2px 6px; gap: 2px; }
-    .pattern-container svg { width: 14px; height: 14px; }
-    .pattern-container svg.pattern-dah { width: 21px; }
+    #target-pattern-outer-wrapper, #user-pattern-container { width: 90%; max-width: 400px; margin: 4px auto; } /* Adjust landscape max width */
+    .pattern-container { min-height: 40px; padding: 3px 8px; gap: 3px; } /* Adjust landscape height/padding */
+    .pattern-container svg { width: 20px; height: 20px; } /* Adjust landscape svg size */
+    .pattern-container svg.pattern-dah { width: 30px; } /* Adjust landscape dah size */
     #stats-display { font-size: 1.0em; padding: 4px 0; gap: 5px 10px; }
     #stats-display > div { padding: 3px 6px; }
     .hint-toggle svg { width: 1.2em; height: 1.2em; }
@@ -404,19 +460,22 @@ html, body {
     .morse-button.results-label-active .paddle-label { font-size: 1.5em; }
     .menu-nav-button { font-size: 1.0em; padding: 4px 8px; top: 5px; left: 5px; }
     .overlay { padding-top: 40px; }
-    /* .settings-overlay removed */
-    .menu-nav-button.settings-back { top: 10px; left: 10px; }
     /* Ensure stats are spaced reasonably in landscape results */
     #game-ui-wrapper.results-active #stats-display { margin-bottom: 10px; }
     .star-rating { font-size: 2em; margin-bottom: 10px;}
     #results-stats p { font-size: 1em; margin-bottom: 3px;}
-    #results-screen .results-instructions { font-size: 0.9em; }
+    #results-screen .results-instructions { font-size: 0.9em; } 
 }
 
 /* Very Small Screens (e.g., small phones) */
 @media (max-width: 360px) {
     #stats-display { font-size: 1.1em; }
+    #text-display { font-size: 3.5em; } /* Slightly smaller on tiny screens */
     .overlay button:not(.menu-nav-button) { font-size: 1.1em; padding: 10px 18px; }
     #level-list button { font-size: 1.1em; padding: 10px 12px; }
     .morse-button.results-label-active .paddle-label { font-size: 1.6em; }
+    #target-pattern-outer-wrapper, #user-pattern-container { width: 95%; max-width: none; } /* Take more width, remove max */
+    .pattern-container svg { width: 24px; height: 24px; } /* Adjust small screen svg size */
+    .pattern-container svg.pattern-dah { width: 36px; } /* Adjust small screen dah size */
+    .pattern-container { min-height: 50px; gap: 4px; } /* Adjust small screen height/gap */
 }

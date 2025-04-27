@@ -1,3 +1,4 @@
+/* In file: js/main.js */
 /**
  * js/main.js
  * ----------
@@ -5,6 +6,8 @@
  * Initializes modules, sets up event listeners, manages UI view transitions,
  * handles settings changes via modal, controls game logic, and handles results screen input.
  * Manages the game update timer for live stats.
+ * Correct feedback is now visual only (no sound).
+ * Handles correct input feedback trigger.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -236,6 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // No other action needed here, state is managed by gameState.addInput
     }
 
+    /** Handles the result of a character decode attempt */
     function handleCharacterDecode() {
         // Called when the decoder timeout triggers (inter-character gap detected)
         if (gameState.status !== GameStatus.DECODING || !(gameState.currentMode === AppMode.GAME || gameState.currentMode === AppMode.SANDBOX)) {
@@ -249,11 +253,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         gameState.clearCurrentInput(); // Clear sequence *before* checking (important!)
 
-        if (!sequence) { // No input sequence was present, likely just a pause
+        // If no input sequence was present, likely just a pause between inputs
+        if (!sequence) {
             gameState.status = GameStatus.LISTENING; // Go back to listening
+            // Keep the target pattern visible if there's a target
             if (targetChar !== null) {
                 const targetMorse = decoder.encodeCharacter(targetChar);
-                uiManager.updateTargetPatternDisplay(targetMorse ?? ""); // Keep showing target
+                uiManager.updateTargetPatternDisplay(targetMorse ?? "");
             }
             return;
         }
@@ -261,38 +267,46 @@ document.addEventListener('DOMContentLoaded', () => {
         const decodedChar = decoder.decodeSequence(sequence);
 
         if (decodedChar && targetChar && decodedChar === targetChar) {
-            // Correct Character
+            // --- Correct Character ---
             uiManager.updateCharacterState(gameState.currentCharIndex, 'completed');
-            audioPlayer.playCorrectSound();
-            uiManager.setPatternDisplayState('correct');
-            const moreChars = gameState.moveToNextCharacter(); // Moves to next, clears input, sets state to LISTENING or FINISHED
+            uiManager.setPatternDisplayState('correct'); // Trigger green flash
+            // audioPlayer.playCorrectSound(); // Sound deactivated
+
+            const moreChars = gameState.moveToNextCharacter(); // Advances state, clears input
 
             if (moreChars) {
-                const nextChar = gameState.getTargetCharacterRaw(); // Get next char to display
+                // Prepare for the next character
+                const nextChar = gameState.getTargetCharacterRaw();
                 if (nextChar !== null) {
-                    uiManager.highlightCharacter(gameState.currentCharIndex, nextChar); // Update UI for next char
+                    uiManager.highlightCharacter(gameState.currentCharIndex, nextChar);
                 } else {
-                    uiManager.updateTargetPatternDisplay(""); // Should not happen if moreChars is true
+                    // Should not happen if moreChars is true, but handle defensively
+                    uiManager.updateTargetPatternDisplay("");
                 }
+                // State is already LISTENING from moveToNextCharacter
             } else {
-                // Sentence Finished - moveToNextCharacter already set status to FINISHED
-                handleSentenceFinished();
+                // --- Sentence Finished ---
+                handleSentenceFinished(); // Handles timer stop, score calculation, results UI
             }
         } else {
-            // Incorrect Character or Undecodable Sequence
+            // --- Incorrect Character or Undecodable Sequence ---
             gameState.registerIncorrectAttempt();
-            uiManager.updateCharacterState(gameState.currentCharIndex, 'incorrect'); // Show incorrect feedback
-            audioPlayer.playIncorrectSound();
-            uiManager.setPatternDisplayState('incorrect');
+            uiManager.updateCharacterState(gameState.currentCharIndex, 'incorrect'); // Flash character red
+            audioPlayer.playIncorrectSound(); // Play incorrect sound
+            uiManager.setPatternDisplayState('incorrect'); // Flash pattern displays red
+
             gameState.status = GameStatus.LISTENING; // Go back to listening for the same character
+
+            // Re-display the target pattern for the current character
             if (targetChar !== null) {
                 const targetMorse = decoder.encodeCharacter(targetChar);
-                uiManager.updateTargetPatternDisplay(targetMorse ?? ""); // Reshow target pattern
+                uiManager.updateTargetPatternDisplay(targetMorse ?? "");
             } else {
-                uiManager.updateTargetPatternDisplay(""); // Should not happen?
+                uiManager.updateTargetPatternDisplay(""); // Clear if no target (shouldn't happen here)
             }
         }
     }
+
 
     function handleSentenceFinished() {
         if (gameState.status === GameStatus.SHOWING_RESULTS) return; // Prevent double execution
@@ -367,6 +381,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const elapsed = gameState.getCurrentElapsedTime();
                 uiManager.updateTimer(elapsed);
                 // Calculate and update live stats (WPM, Acc)
+                // Use calculateScores which now handles live calculation correctly
                 const liveStats = scoreCalculator.calculateLiveStats(gameState);
                 uiManager.updateWpmDisplay(liveStats.netWpm);
                 uiManager.updateAccuracyDisplay(liveStats.accuracy);
@@ -374,8 +389,10 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                  // If no longer playing but timer is running, stop it
                  // (Should be stopped by handleSentenceFinished, but as a safeguard)
-                 console.log("Game no longer playing, stopping update timer.");
-                 stopGameUpdateTimer();
+                 if(gameTimerIntervalId) {
+                    console.log("Game no longer playing, stopping update timer.");
+                    stopGameUpdateTimer();
+                 }
             }
         }, 100); // Update 10 times per second
     }

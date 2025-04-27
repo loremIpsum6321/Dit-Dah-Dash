@@ -1,0 +1,343 @@
+/**
+ * css/style.css
+ * -------------
+ * Styling for Dit-Dah-Dash application, supporting Light and Dark modes,
+ * and different views (Menu, Game, Sandbox, Playback). Includes hint visibility toggle.
+ */
+
+/* --- Global Styles & Resets --- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+    /* Light Mode Variables */
+    --bg-color: #f0f0f0;
+    --text-color: #333;
+    --container-bg: #ffffff;
+    --border-color: #cccccc;
+    --input-area-bg: #e0e0e0;
+    --button-dit-bg: #2196F3;
+    --button-dah-bg: #ff9800;
+    --button-text-color: white;
+    --button-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    --button-active-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    --pattern-bg: #eeeeee;
+    --pattern-svg-fill: #555555;
+    --pattern-correct-bg: #c8e6c9;
+    --pattern-correct-fill: #2e7d32;
+    --pattern-incorrect-bg: #ffcdd2;
+    --pattern-incorrect-fill: #c62828;
+    --text-display-wrapper-bg: #fdfdfd;
+    --text-display-border: 1px solid #eee;
+    --char-pending-color: var(--text-color);
+    --char-current-bg: #fff59d;
+    --char-current-color: #000;
+    --char-current-shadow: 0 0 0 2px #fdd835;
+    --char-completed-color: #4CAF50;
+    --char-incorrect-bg: #f44336;
+    --char-incorrect-color: white;
+    --stats-bg: #f8f8f8;
+    --stats-color: #555;
+    --stats-border: 1px solid #eee;
+    --playback-input-bg: white;
+    --playback-input-border: 1px solid #ccc;
+    --playback-morse-bg: #f8f8f8;
+    --playback-morse-color: #666;
+    --button-primary-bg: #2196F3;
+    --button-primary-hover-bg: #1976D2;
+    --button-secondary-bg: #aaa;
+    --button-secondary-hover-bg: #888;
+    --button-success-bg: #4CAF50;
+    --button-success-hover-bg: #388E3C;
+    --button-reset-bg: #e0e0e0;
+    --button-reset-hover-bg: #d5d5d5;
+    --overlay-bg: rgba(255, 255, 255, 0.98);
+    --overlay-shadow: 0 0 20px rgba(0,0,0,0.1);
+    --settings-bg: #ffffff;
+    --settings-border: 1px solid #ccc;
+    --settings-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    --settings-text-color: #333;
+    --settings-toggle-color: #777;
+    --settings-toggle-hover-color: #333;
+    --level-button-bg: #e0e0e0;
+    --level-button-color: #333;
+    --level-button-hover-bg: #d5d5d5;
+    --level-locked-bg: #f5f5f5;
+    --level-locked-color: #aaa;
+    --level-unlocked-bg: #a5d6a7;
+    --level-unlocked-color: #1b5e20;
+    --level-unlocked-hover-bg: #81c784;
+    --level-completed-bg: #fff59d;
+    --level-completed-color: #3e2723;
+    --level-completed-hover-bg: #ffee58;
+    --hint-toggle-color: #888;
+    --hint-toggle-hover-color: #555;
+}
+
+.dark-mode {
+    /* Dark Mode Variables */
+    --bg-color: #212121;
+    --text-color: #e0e0e0;
+    --container-bg: #333333;
+    --border-color: #555555;
+    --input-area-bg: #424242;
+    --button-dit-bg: #03A9F4;
+    --button-dah-bg: #FFC107;
+    --button-text-color: #212121;
+    --button-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+    --button-active-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+    --pattern-bg: #444444;
+    --pattern-svg-fill: #bbbbbb;
+    --pattern-correct-bg: #388E3C;
+    --pattern-correct-fill: #c8e6c9;
+    --pattern-incorrect-bg: #D32F2F;
+    --pattern-incorrect-fill: #ffcdd2;
+    --text-display-wrapper-bg: #2a2a2a;
+    --text-display-border: 1px solid #444;
+    --char-pending-color: var(--text-color);
+    --char-current-bg: #5c6bc0;
+    --char-current-color: #e8eaf6;
+    --char-current-shadow: 0 0 0 2px #7986cb;
+    --char-completed-color: #81C784;
+    --char-incorrect-bg: #f44336;
+    --char-incorrect-color: white;
+    --stats-bg: #3a3a3a;
+    --stats-color: #bdbdbd;
+    --stats-border: 1px solid #555;
+    --playback-input-bg: #555;
+    --playback-input-border: 1px solid #777;
+    --playback-morse-bg: #444;
+    --playback-morse-color: #ccc;
+    --button-primary-bg: #03A9F4;
+    --button-primary-hover-bg: #29B6F6;
+    --button-secondary-bg: #757575;
+    --button-secondary-hover-bg: #9E9E9E;
+    --button-success-bg: #66BB6A;
+    --button-success-hover-bg: #81C784;
+    --button-reset-bg: #616161;
+    --button-reset-hover-bg: #757575;
+    --overlay-bg: rgba(40, 40, 40, 0.98);
+    --overlay-shadow: 0 0 20px rgba(0,0,0,0.5);
+    --settings-bg: #424242;
+    --settings-border: 1px solid #616161;
+    --settings-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    --settings-text-color: #e0e0e0;
+    --settings-toggle-color: #bdbdbd;
+    --settings-toggle-hover-color: #f5f5f5;
+    --level-button-bg: #616161;
+    --level-button-color: #e0e0e0;
+    --level-button-hover-bg: #757575;
+    --level-locked-bg: #424242;
+    --level-locked-color: #757575;
+    --level-unlocked-bg: #388E3C;
+    --level-unlocked-color: #e8f5e9;
+    --level-unlocked-hover-bg: #4CAF50;
+    --level-completed-bg: #FBC02D;
+    --level-completed-color: #424242;
+    --level-completed-hover-bg: #FFEB3B;
+    --hint-toggle-color: #bdbdbd;
+    --hint-toggle-hover-color: #fff;
+}
+
+
+html, body {
+    width: 100%; height: 100%; font-family: 'Roboto Mono', monospace;
+    background-color: var(--bg-color); color: var(--text-color);
+    -webkit-tap-highlight-color: transparent; overflow: hidden;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* --- Main Layout --- */
+#game-container { display: flex; flex-direction: column; width: 100%; height: 100%; position: fixed; top: 0; left: 0; }
+#display-area {
+    width: 100%; height: 80%; display: flex; flex-direction: column;
+    padding: 10px 15px; position: relative; background-color: var(--container-bg);
+    border-bottom: 2px solid var(--border-color); overflow: hidden;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+#input-area {
+    width: 100%; height: 20%; display: flex; justify-content: space-between;
+    align-items: stretch; padding: 15px; gap: 15px; background-color: var(--input-area-bg);
+    transition: background-color 0.3s ease;
+}
+
+/* --- Game Mode UI Wrapper --- */
+#game-ui-wrapper { display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden; }
+
+/* --- Input Buttons (Game Mode) --- */
+.morse-button {
+    flex-grow: 1; flex-basis: 45%; max-width: 48%; font-weight: bold; border: none;
+    border-radius: 15px; cursor: pointer; color: var(--button-text-color); box-shadow: var(--button-shadow);
+    transition: background-color 0.1s ease, transform 0.05s ease, box-shadow 0.1s ease;
+    display: flex; justify-content: center; align-items: center; user-select: none;
+    -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none;
+    height: 100%; padding: 10px;
+}
+#dit-button svg { width: 20%; height: 30%; fill: currentColor; pointer-events: none; }
+#dah-button svg { width: 20%; height: 45%; fill: currentColor; pointer-events: none; }
+#dit-button { background-color: var(--button-dit-bg); }
+#dah-button { background-color: var(--button-dah-bg); }
+.morse-button:active, .morse-button.active { transform: scale(0.97); box-shadow: var(--button-active-shadow); filter: brightness(0.9); }
+
+/* --- Text Display (Game Mode) --- */
+#text-display-wrapper {
+    display: flex; align-items: center; justify-content: center; flex-grow: 1;
+    padding: 5px 0; overflow-y: auto; line-height: 1.8; width: 100%;
+    max-width: 90%; margin: 0 auto; border: var(--text-display-border);
+    border-radius: 8px; background-color: var(--text-display-wrapper-bg);
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+#text-display {
+    font-size: 3.5em; white-space: pre-wrap; text-align: center;
+    word-break: keep-all; overflow-wrap: break-word; max-width: 100%; padding: 10px;
+}
+.char { display: inline-block; min-width: 0.6em; transition: background-color 0.2s ease, color 0.2s ease; border-radius: 3px; padding: 0 0.05em; margin: 0 0.02em; }
+.char.pending { color: var(--char-pending-color); }
+.char.current { background-color: var(--char-current-bg); color: var(--char-current-color); box-shadow: var(--char-current-shadow); font-weight: bold; }
+.char.completed { color: var(--char-completed-color); font-weight: bold; }
+.char.incorrect { color: var(--char-incorrect-color); background-color: var(--char-incorrect-bg); animation: shake 0.3s ease-in-out; }
+@keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+.char.space { min-width: 0.5em; }
+
+/* --- Pattern Displays (Game Mode) --- */
+#target-pattern-outer-wrapper { /* New wrapper for positioning hint toggle */
+    position: relative; /* Needed for absolute positioning of button */
+    width: 80%; max-width: 400px;
+    margin: 8px auto; /* Matches pattern-container margin */
+    flex-shrink: 0;
+}
+.pattern-container {
+    width: 100%; /* Take width from outer wrapper */
+    min-height: 45px;
+    padding: 5px 10px; background-color: var(--pattern-bg); border-radius: 8px;
+    display: flex; justify-content: center; align-items: center; gap: 4px;
+    transition: background-color 0.15s ease-in-out;
+    /* No margin here, handled by outer wrapper or direct placement */
+}
+#user-pattern-container { /* Keep margin if not wrapped */
+    margin: 8px auto; flex-shrink: 0;
+    width: 80%; max-width: 400px;
+}
+
+.pattern-container svg { width: 20px; height: 20px; fill: var(--pattern-svg-fill); transition: fill 0.15s ease-in-out, visibility 0s; }
+.pattern-container svg.pattern-dah { width: 30px; }
+.pattern-container.correct-pattern { background-color: var(--pattern-correct-bg); }
+.pattern-container.correct-pattern svg { fill: var(--pattern-correct-fill); }
+.pattern-container.incorrect-pattern { background-color: var(--pattern-incorrect-bg); }
+.pattern-container.incorrect-pattern svg { fill: var(--pattern-incorrect-fill); }
+
+/* Hint Visibility Styles */
+.hint-toggle {
+    position: absolute;
+    top: 50%; right: -5px; /* Position to the right, adjust as needed */
+    transform: translate(100%, -50%); /* Center vertically, push outside */
+    background: none; border: none; font-size: 1.6em; /* Adjust size */
+    padding: 0 5px; cursor: pointer; color: var(--hint-toggle-color);
+    line-height: 1;
+    transition: color 0.2s ease;
+    z-index: 5; /* Ensure it's clickable */
+}
+.hint-toggle:hover { color: var(--hint-toggle-hover-color); }
+.hint-toggle .icon-visible,
+.hint-toggle .icon-hidden { display: none; } /* Hide both icons by default */
+
+/* Show the correct icon based on container state */
+#target-pattern-container:not(.hint-hidden) + .hint-toggle .icon-visible { display: inline; }
+#target-pattern-container.hint-hidden + .hint-toggle .icon-hidden { display: inline; }
+
+/* Hide the pattern SVGs when hint is hidden */
+#target-pattern-container.hint-hidden svg { visibility: hidden; }
+
+/* --- Stats Display (Game Mode) --- */
+#stats-display { display: flex; justify-content: space-around; align-items: center; padding: 8px 0; font-size: 1.3em; color: var(--stats-color); margin-top: auto; flex-wrap: wrap; gap: 8px; width: 100%; flex-shrink: 0; border-top: var(--stats-border); transition: color 0.3s ease, border-color 0.3s ease; }
+#stats-display > div { background-color: var(--stats-bg); padding: 4px 8px; border-radius: 5px; white-space: nowrap; transition: background-color 0.3s ease; }
+
+/* --- Playback & Sandbox Areas --- */
+#playback-area, #sandbox-area {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 20px; gap: 15px; flex-grow: 1; overflow-y: auto;
+    width: 100%; height: 100%;
+}
+#playback-area h2, #sandbox-area h2 { color: var(--text-color); margin-bottom: 10px; }
+#playback-area label, #sandbox-area label { font-size: 1.1em; margin-bottom: -10px; color: var(--text-color); }
+#playback-input, #sandbox-input { font-family: 'Roboto Mono', monospace; font-size: 1.3em; padding: 8px 12px; border: var(--playback-input-border); border-radius: 6px; width: 80%; max-width: 500px; text-align: center; background-color: var(--playback-input-bg); color: var(--text-color); transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease; }
+#play-sentence-button { font-size: 1.2em; padding: 10px 20px; cursor: pointer; border: none; border-radius: 8px; background-color: var(--button-success-bg); color: var(--button-text-color); transition: background-color 0.2s ease; }
+#play-sentence-button:hover:not(:disabled) { background-color: var(--button-success-hover-bg); }
+#play-sentence-button:disabled { background-color: #cccccc; cursor: not-allowed; opacity: 0.7; }
+#start-sandbox-button { font-size: 1.2em; padding: 10px 20px; cursor: pointer; border: none; border-radius: 8px; background-color: var(--button-primary-bg); color: var(--button-text-color); transition: background-color 0.2s ease; }
+#start-sandbox-button:hover:not(:disabled) { background-color: var(--button-primary-hover-bg); }
+#start-sandbox-button:disabled { background-color: #cccccc; cursor: not-allowed; opacity: 0.7; }
+#playback-morse-display, #sandbox-morse-preview { font-family: 'Courier New', Courier, monospace; font-size: 1.1em; color: var(--playback-morse-color); margin-top: 10px; word-break: break-all; background-color: var(--playback-morse-bg); padding: 5px 10px; border-radius: 4px; max-width: 90%; min-height: 1.5em; transition: background-color 0.3s ease, color 0.3s ease; }
+
+/* Back button common style */
+.back-button {
+    margin-top: 20px; font-size: 1.1em; padding: 8px 16px;
+    background-color: var(--button-secondary-bg); color: var(--button-text-color);
+    border: none; border-radius: 6px; cursor: pointer; transition: background-color 0.2s ease;
+}
+.back-button:hover { background-color: var(--button-secondary-hover-bg); }
+
+/* --- Settings Area (Shared) --- */
+#settings-area { position: absolute; top: 8px; right: 8px; z-index: 10; }
+#settings-toggle-button { background: none; border: none; font-size: 2.4em; cursor: pointer; padding: 5px; color: var(--settings-toggle-color); transition: color 0.2s ease; }
+#settings-toggle-button:hover { color: var(--settings-toggle-hover-color); }
+#settings-controls { position: absolute; top: 45px; right: 0; background-color: var(--settings-bg); border: var(--settings-border); border-radius: 8px; padding: 15px; box-shadow: var(--settings-shadow); display: flex; flex-direction: column; gap: 12px; min-width: 220px; color: var(--settings-text-color); font-size: 1.2em; transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease; }
+#settings-controls.hidden { display: none !important; }
+#settings-controls label { margin-bottom: -5px; }
+#settings-controls input[type="range"] { width: 100%; cursor: pointer; }
+#settings-controls input[type="checkbox"] { margin-right: 5px; transform: scale(1.4); cursor: pointer; accent-color: var(--button-primary-bg); }
+#settings-controls button { padding: 8px 12px; background-color: var(--button-reset-bg); border: 1px solid var(--border-color); border-radius: 5px; cursor: pointer; font-size: 1.1em; color: var(--text-color); transition: background-color 0.2s ease; }
+#settings-controls button:hover { background-color: var(--button-reset-hover-bg); }
+#reset-progress-button { background-color: var(--char-incorrect-bg); color: var(--char-incorrect-color); }
+#reset-progress-button:hover { filter: brightness(0.9); }
+
+/* --- Overlays (Main Menu, Results, Level Select) --- */
+.overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: var(--overlay-bg);
+    z-index: 20; display: flex; flex-direction: column; justify-content: center; align-items: center;
+    padding: 20px; text-align: center; box-shadow: var(--overlay-shadow); overflow-y: auto; font-size: 1.4em;
+    color: var(--text-color);
+    transition: background-color 0.3s ease;
+}
+.overlay h2 { margin-bottom: 20px; color: var(--text-color); font-size: 1.8em; }
+.overlay p { margin-bottom: 15px; font-size: 1.4em; color: var(--text-color); opacity: 0.9; }
+.overlay small { font-size: 1.0em; color: var(--text-color); opacity: 0.7; display: block; margin-bottom: 15px; }
+.overlay > div { margin-top: 10px; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;}
+.overlay button {
+    padding: 12px 24px; font-size: 1.3em; cursor: pointer; border: none; border-radius: 8px;
+    background-color: var(--button-primary-bg); color: var(--button-text-color); margin: 5px; transition: background-color 0.2s ease; min-width: 140px;
+}
+.overlay button:hover:not(:disabled) { background-color: var(--button-primary-hover-bg); }
+.overlay button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Main Menu Specifics */
+#main-menu-overlay div { display: flex; flex-direction: column; align-items: center; width: 100%; }
+#main-menu-overlay button { width: 70%; max-width: 300px; margin: 10px 0; }
+
+/* Level Selection Specifics */
+#level-selection-screen h2 { margin-bottom: 15px; }
+#level-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-bottom: 20px; max-height: 60%; overflow-y: auto; width: 100%; max-width: 600px; padding: 10px; }
+#level-list button {
+     padding: 10px 15px; font-size: 1.1em;
+     border: none; border-radius: 6px; transition: background-color 0.2s ease, transform 0.1s ease, color 0.2s ease; margin: 0;
+}
+#level-list button:hover:not(:disabled) { transform: translateY(-1px); }
+#level-list button.locked { background-color: var(--level-locked-bg); color: var(--level-locked-color); cursor: not-allowed; opacity: 0.7; }
+#level-list button.unlocked { background-color: var(--level-unlocked-bg); color: var(--level-unlocked-color); }
+#level-list button.unlocked:hover:not(:disabled) { background-color: var(--level-unlocked-hover-bg); }
+#level-list button.completed { background-color: var(--level-completed-bg); color: var(--level-completed-color); }
+#level-list button.completed:hover:not(:disabled) { background-color: var(--level-completed-hover-bg); }
+#level-list button:disabled { pointer-events: none; }
+#level-selection-screen .back-button { margin-top: 15px; }
+
+
+/* Results Screen Specifics */
+#results-screen div { margin-top: 15px; }
+#level-unlock-message { color: var(--char-completed-color); font-weight: bold; }
+#next-level-button { background-color: var(--button-success-bg); }
+#next-level-button:hover { background-color: var(--button-success-hover-bg); }
+#retry-button { background-color: var(--button-dah-bg); }
+#retry-button:hover { background-color: #fb8c00; }
+
+
+/* --- Utility Classes --- */
+.hidden { display: none !important; }

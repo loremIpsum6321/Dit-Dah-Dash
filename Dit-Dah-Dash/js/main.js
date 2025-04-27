@@ -8,7 +8,8 @@
  * Manages the game update timer for live stats.
  * Correct feedback is now visual only (no sound).
  * Handles correct input feedback trigger.
- * Connects InputHandler and AudioPlayer for tone end callbacks.
+ * Connects InputHandler and AudioPlayer for tone end callbacks via InputHandler constructor.
+ * Ensures early audio context initialization attempt on load.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -21,16 +22,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const audioPlayer = window.morseAudioPlayer;
     const levelManager = window.morseLevelManager;
     const scoreCalculator = window.morseScoreCalculator;
-    let inputHandler = null;
+    let inputHandler = null; // Initialized later
     let settingsModal = null; // Placeholder for Modal instance
 
     let gameTimerIntervalId = null; // For live stats update
 
     // --- Initialization ---
     function initializeApp() {
+        // Try to initialize audio context early (best effort for mobile)
+        // User interaction might still be needed later.
+        audioPlayer.initializeAudioContext();
+
         initializeSettingsModal(); // Initialize modal first
-        initializeInputHandler(); // Init InputHandler
-        initializeAudioPlayerCallbacks(); // Connect AudioPlayer and InputHandler
+        initializeInputHandler(); // Init InputHandler (this now connects audio callback too)
+        // initializeAudioPlayerCallbacks(); // No longer needed here, handled in InputHandler constructor
         applyInitialSettings();
         setupEventListeners();
         showMainMenu(); // Show main menu initially
@@ -59,29 +64,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function initializeInputHandler() {
         if (inputHandler) return;
+        // Pass the necessary instances to the InputHandler constructor
         inputHandler = new InputHandler(
             gameState,
             decoder,
             audioPlayer,
             uiManager,
-            { // Callbacks
+            { // Callbacks object
                 onInput: handleInputHandlerInput,
                 onCharacterDecode: handleCharacterDecode,
                 onResultsInput: handleResultsInput
             }
         );
-        console.log("InputHandler initialized.");
+        console.log("InputHandler initialized and AudioPlayer callback connected.");
     }
 
-    /** Sets up the callback from AudioPlayer to InputHandler */
-    function initializeAudioPlayerCallbacks() {
-        if (audioPlayer && inputHandler && inputHandler.handleToneEnd) {
-            audioPlayer.setOnToneEndCallback(inputHandler.handleToneEnd.bind(inputHandler));
-            console.log("AudioPlayer onToneEndCallback connected to InputHandler.");
-        } else {
-            console.error("Failed to connect AudioPlayer callback - instances not ready?");
-        }
-    }
+    /** Sets up the callback from AudioPlayer to InputHandler - REMOVED (now done in IH constructor) */
+    // function initializeAudioPlayerCallbacks() { ... } // Removed
 
     function setupEventListeners() {
         // Most UI events are handled within UIManager, which calls back functions here
@@ -91,9 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
             onShowSandbox: handleShowSandboxInput,
             onShowPlayback: handleShowPlayback,
             onShowMainMenu: showMainMenu,
-            // Settings are handled by the Modal instance now (onOpen/onClose)
-            // onShowSettings: handleShowSettings, // Removed, handled by Modal
-            // onHideSettings: handleHideSettings, // Removed, handled by Modal
+            // Settings handled by Modal instance (onOpen/onClose)
 
             // Action Callbacks
             onPlaySentence: playSentenceFromInput,
@@ -109,6 +106,17 @@ document.addEventListener('DOMContentLoaded', () => {
             onHintToggle: applyHintSetting, // Hint toggle is still in game UI
             onResetProgress: resetProgress,
         });
+
+        // Add a global touchstart listener to attempt audio context resume on first touch
+        // This is a fallback/enhancement for mobile browser restrictions
+        const primeAudioContext = () => {
+            console.log("Priming audio context via global touchstart...");
+            audioPlayer.initializeAudioContext();
+            // Remove listener after first successful priming attempt
+            document.body.removeEventListener('touchstart', primeAudioContext, { capture: true });
+        };
+        document.body.addEventListener('touchstart', primeAudioContext, { passive: true, capture: true });
+
     }
 
     // --- UI View Transitions & State Management ---
@@ -164,6 +172,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Stop game timer if settings opened during gameplay
         if (gameState.isPlaying() || gameState.status === GameStatus.READY) {
             stopGameUpdateTimer(); // Pause timer display updates
+            // Consider pausing audio/input if needed, but currently just stops timer updates
         }
         gameState.status = GameStatus.SETTINGS;
         gameState.currentMode = AppMode.SETTINGS;
@@ -173,19 +182,22 @@ document.addEventListener('DOMContentLoaded', () => {
      /** Called when the settings modal is closed */
     function handleHideSettings() {
         console.log("Exiting Settings...");
-        // Decide where to return - typically main menu unless game was active?
-        // For simplicity, always return to main menu for now.
+        // Decide where to return. If a game was active, could potentially resume,
+        // but for simplicity, returning to Main Menu is often safest.
+        // Let's check the previous state.
+        // TODO: Implement a more robust state management for pausing/resuming.
+        // For now, just go to main menu.
         showMainMenu();
-        // Alternatively, could check previous state:
-        // if (previousState === GameStatus.LISTENING || ...) resumeGame();
-        // else showMainMenu();
     }
 
     // --- Game/Sandbox Mode Logic ---
     function startGameLevel(levelId, sentenceIndex = 0) {
         console.log(`Attempting to start Level ${levelId}, Sentence ${sentenceIndex + 1}`);
         const sentenceText = levelManager.getSpecificSentence(levelId, sentenceIndex);
-        if (sentenceText === null) { console.error(`Cannot start level: Invalid levelId/sentenceIndex.`); showMainMenu(); return; }
+        if (sentenceText === null) {
+            console.error(`Cannot start level: Invalid levelId ${levelId} / sentenceIndex ${sentenceIndex}.`);
+            showMainMenu(); return;
+        }
 
         gameState.startLevelSentence(levelId, sentenceIndex, sentenceText);
         applyCurrentSettingsToModules(); // Ensure WPM/Freq are correct
@@ -193,12 +205,23 @@ document.addEventListener('DOMContentLoaded', () => {
         uiManager.renderSentence(sentenceText);
         uiManager.resetStatsDisplay(); // Clear previous stats
 
-        const firstChar = gameState.getTargetCharacterRaw();
+        // Highlight first non-space character
+        const firstCharIndex = gameState.currentCharIndex; // Already advanced past leading spaces
+        const firstChar = gameState.getTargetCharacterRaw(); // Gets char at current index
         if (firstChar !== null) {
-            uiManager.highlightCharacter(gameState.currentCharIndex, firstChar);
+            uiManager.highlightCharacter(firstCharIndex, firstChar);
+        } else if (sentenceText.trim().length === 0){
+            // Handle empty sentence case immediately
+            console.warn("Starting level with empty or whitespace-only sentence.");
+            gameState.status = GameStatus.FINISHED; // Mark as finished
+            handleSentenceFinished(); // Go directly to results (0 scores)
+            return;
         } else {
-            uiManager.updateTargetPatternDisplay(""); // Handle empty sentence start?
+             // This case should ideally not happen if startLevelSentence works correctly
+             console.error("Could not get first character even though sentence is not empty.");
+             uiManager.updateTargetPatternDisplay("");
         }
+
         stopGameUpdateTimer(); // Ensure timer is stopped before first input
         console.log("Game ready.");
     }
@@ -214,11 +237,17 @@ document.addEventListener('DOMContentLoaded', () => {
         uiManager.renderSentence(sentenceText);
         uiManager.resetStatsDisplay(); // Clear previous stats
 
+        // Highlight first non-space character
+        const firstCharIndex = gameState.currentCharIndex;
         const firstChar = gameState.getTargetCharacterRaw();
         if (firstChar !== null) {
-            uiManager.highlightCharacter(gameState.currentCharIndex, firstChar);
+            uiManager.highlightCharacter(firstCharIndex, firstChar);
         } else {
-            uiManager.updateTargetPatternDisplay("");
+             // This implies the input was only spaces
+             console.warn("Starting sandbox with whitespace-only sentence.");
+             gameState.status = GameStatus.FINISHED; // Mark as finished
+             handleSentenceFinished(); // Go directly to results
+             return;
         }
         stopGameUpdateTimer(); // Ensure timer is stopped before first input
         console.log("Sandbox ready.");
@@ -235,183 +264,200 @@ document.addEventListener('DOMContentLoaded', () => {
             startGameLevel(levelId, 0); // Start the selected level
         } else {
             console.warn(`Attempted to select locked level: ${levelId}`);
-            // Optionally show a message to the user
+            // Optional: Show a message to the user via UI Manager
         }
      }
 
     // --- Input Handling Callbacks (from InputHandler) ---
     function handleInputHandlerInput(inputChar) {
-        // Called whenever a dit (.) or dah (-) is added to the sequence *successfully* (not queued)
+        // Called whenever a dit (.) or dah (-) is successfully added to the sequence
         // Start the game timer on the very first input if ready
         if (gameState.status === GameStatus.READY && (gameState.currentMode === AppMode.GAME || gameState.currentMode === AppMode.SANDBOX)) {
-            if (gameState.startTimer()) { // startTimer sets status to LISTENING
+            if (gameState.startTimer()) { // startTimer sets status to LISTENING then TYPING
                  startGameUpdateTimer(); // Start the visual timer update loop
             }
+            // gameState.addInput already handled setting state to TYPING
         }
-        // No other action needed here, state is managed by gameState.addInput
+        // No other action needed here, state is managed by gameState.addInput and InputHandler
     }
 
-    /** Handles the result of a character decode attempt */
+    /** Handles the result of a character decode attempt (called by InputHandler via decoder schedule) */
     function handleCharacterDecode() {
-        // Called when the decoder timeout triggers (inter-character gap detected)
+        // This function is called when the inter-character gap timeout fires.
+        // The gameState.status should be DECODING at this point.
         if (gameState.status !== GameStatus.DECODING || !(gameState.currentMode === AppMode.GAME || gameState.currentMode === AppMode.SANDBOX)) {
-            console.warn("handleCharacterDecode called in unexpected state/mode.");
-            if (gameState.status === GameStatus.DECODING) gameState.status = GameStatus.LISTENING; // Recover state if possible
+            console.warn("handleCharacterDecode called in unexpected state/mode:", gameState.status, gameState.currentMode);
+            if (gameState.status === GameStatus.DECODING) gameState.status = GameStatus.LISTENING; // Attempt recovery
             return;
         }
 
         const sequence = gameState.currentInputSequence;
-        const targetChar = gameState.getTargetCharacter(); // Expected character (uppercase)
+        const targetChar = gameState.getTargetCharacter(); // Expected character (uppercase, non-space)
 
-        gameState.clearCurrentInput(); // Clear sequence *before* checking (important!)
+        // It's crucial to clear the input sequence *after* getting it, before checking result.
+        // However, gameState.clearCurrentInput() also resets the status, so let's clear manually here.
+        gameState.currentInputSequence = ""; // Clear sequence directly
+        gameState.inputTimestamps = []; // Clear timestamps
+        // gameState.clearCharacterTimeout(); // Decoder already cleared this
 
-        // If no input sequence was present, likely just a pause between inputs
+        // Update UI for cleared input
+        uiManager.updateUserPatternDisplay("");
+
+        // If no sequence was present when decode triggered (e.g., pause without input), just revert to listening
         if (!sequence) {
             gameState.status = GameStatus.LISTENING; // Go back to listening
-            // Keep the target pattern visible if there's a target
+            // Re-display target pattern if applicable
             if (targetChar !== null) {
                 const targetMorse = decoder.encodeCharacter(targetChar);
                 uiManager.updateTargetPatternDisplay(targetMorse ?? "");
+            } else {
+                 // This means we finished the sentence while waiting for decode - should be handled by moveToNextCharacter
             }
             return;
         }
 
+        // Decode the sequence we captured
         const decodedChar = decoder.decodeSequence(sequence);
 
+        // --- Compare Decoded Character with Target ---
         if (decodedChar && targetChar && decodedChar === targetChar) {
-            // --- Correct Character ---
+            // --- CORRECT ---
             uiManager.updateCharacterState(gameState.currentCharIndex, 'completed');
-            uiManager.setPatternDisplayState('correct'); // Trigger green flash
-            // audioPlayer.playCorrectSound(); // Sound deactivated
+            uiManager.setPatternDisplayState('correct'); // Visual feedback
 
-            const moreChars = gameState.moveToNextCharacter(); // Advances state, clears input
+            const moreChars = gameState.moveToNextCharacter(); // Advances index, handles spaces, clears input state, sets status to LISTENING or FINISHED
 
             if (moreChars) {
                 // Prepare for the next character
-                const nextChar = gameState.getTargetCharacterRaw();
-                if (nextChar !== null) {
-                    uiManager.highlightCharacter(gameState.currentCharIndex, nextChar);
-                } else {
-                    // Should not happen if moreChars is true, but handle defensively
-                    uiManager.updateTargetPatternDisplay("");
+                const nextCharIndex = gameState.currentCharIndex;
+                const nextCharRaw = gameState.getTargetCharacterRaw();
+                if (nextCharRaw !== null) {
+                    uiManager.highlightCharacter(nextCharIndex, nextCharRaw); // Highlights & updates target pattern
                 }
-                // State is already LISTENING from moveToNextCharacter
+                // gameState.status is already LISTENING
             } else {
-                // --- Sentence Finished ---
-                handleSentenceFinished(); // Handles timer stop, score calculation, results UI
+                // --- SENTENCE FINISHED ---
+                // gameState.status is now FINISHED
+                handleSentenceFinished(); // Calculate scores, show results UI
             }
         } else {
-            // --- Incorrect Character or Undecodable Sequence ---
+            // --- INCORRECT --- (or undecodable sequence)
             gameState.registerIncorrectAttempt();
-            uiManager.updateCharacterState(gameState.currentCharIndex, 'incorrect'); // Flash character red
-            audioPlayer.playIncorrectSound(); // Play incorrect sound
-            uiManager.setPatternDisplayState('incorrect'); // Flash pattern displays red
+            uiManager.updateCharacterState(gameState.currentCharIndex, 'incorrect'); // Visual feedback (flash red)
+            audioPlayer.playIncorrectSound();
+            uiManager.setPatternDisplayState('incorrect'); // Visual feedback
 
-            gameState.status = GameStatus.LISTENING; // Go back to listening for the same character
+            gameState.status = GameStatus.LISTENING; // Go back to listening for the *same* character
 
             // Re-display the target pattern for the current character
             if (targetChar !== null) {
                 const targetMorse = decoder.encodeCharacter(targetChar);
                 uiManager.updateTargetPatternDisplay(targetMorse ?? "");
             } else {
-                uiManager.updateTargetPatternDisplay(""); // Clear if no target (shouldn't happen here)
+                 // Should not happen if we are in an incorrect state for a character
+                uiManager.updateTargetPatternDisplay("");
             }
         }
     }
 
 
     function handleSentenceFinished() {
-        if (gameState.status === GameStatus.SHOWING_RESULTS) return; // Prevent double execution
+        // Ensure this runs only once per sentence completion
+        if (gameState.status === GameStatus.SHOWING_RESULTS || gameState.status === GameStatus.MENU) return;
 
         // Ensure timer is stopped and status is FINISHED
         if (gameState.status !== GameStatus.FINISHED) {
-            if (!gameState.stopTimer()) { // stopTimer sets status to FINISHED if successful
-                 gameState.status = GameStatus.FINISHED; // Force status if timer couldn't stop (already stopped?)
-            }
+            gameState.stopTimer(); // This sets status to FINISHED if successful
+        }
+        // If stopTimer failed (e.g., already stopped, or never started), force status
+        if (gameState.status !== GameStatus.FINISHED) {
+             gameState.status = GameStatus.FINISHED;
         }
         stopGameUpdateTimer(); // Stop the visual update loop
 
         const scores = scoreCalculator.calculateScores(gameState);
 
-        // Update final stats display before showing results overlay
-        uiManager.updateTimer(gameState.elapsedTime); // Show final time
-        // uiManager.updateWpmDisplay(scores.netWpm); // Stats are shown on results overlay now
-        // uiManager.updateAccuracyDisplay(scores.accuracy);
-        // uiManager.updateGrossWpmDisplay(scores.grossWpm);
-
+        // Update final stats display on the main game UI *before* showing results overlay
+        // This prevents seeing stale stats briefly if the overlay is transparent
+        uiManager.updateTimer(gameState.elapsedTime);
+        // uiManager.updateWpmDisplay(scores.netWpm); // Shown on overlay
+        // uiManager.updateAccuracyDisplay(scores.accuracy); // Shown on overlay
+        // uiManager.updateGrossWpmDisplay(scores.grossWpm); // Shown on overlay
 
         let unlockedNextLevelId = null;
         let hasNextLevelOption = false;
 
+        // Handle scoring and unlocking only in Game mode
         if (gameState.currentMode === AppMode.GAME && gameState.currentLevelId !== null) {
             const unlockResult = levelManager.recordScoreAndCheckUnlocks(gameState.currentLevelId, scores);
             unlockedNextLevelId = unlockResult.unlockedNextLevelId;
 
-            // Check if there's a playable next sentence/level
+            // Check if there's a *playable* next step (next sentence in level, or next unlocked level)
             const nextSentenceDetails = levelManager.getNextSentence(gameState);
             hasNextLevelOption = nextSentenceDetails !== null && levelManager.isLevelUnlocked(nextSentenceDetails.levelId);
-        } else { // Sandbox mode
+        } else { // Sandbox mode or error case
             hasNextLevelOption = false; // No "next" in sandbox
         }
 
         // Show the results screen overlay
         uiManager.showResultsScreen(scores, unlockedNextLevelId, hasNextLevelOption, gameState.currentMode);
-        gameState.status = GameStatus.SHOWING_RESULTS; // Set state *after* UI transition
+        gameState.status = GameStatus.SHOWING_RESULTS; // Set final status *after* UI is shown
         console.log(`${gameState.currentMode} sentence finished, showing results.`);
     }
 
     // --- Results Screen Input Handling ---
     function handleResultsInput(type) {
-        // Called by InputHandler when a paddle is pressed in SHOWING_RESULTS state
+        // Called by InputHandler when a paddle is pressed ONLY in SHOWING_RESULTS state
         if (gameState.status !== GameStatus.SHOWING_RESULTS) return;
 
-        if (type === 'dit') { // Dit = Next
+        // Dit maps to the 'Next' action (if available)
+        if (type === 'dit') {
             console.log("Results: Dit pressed - Attempting Next");
             if (gameState.currentMode === AppMode.GAME) {
                  const next = levelManager.getNextSentence(gameState);
+                 // Check if 'next' exists and is unlocked
                  if (next && levelManager.isLevelUnlocked(next.levelId)) {
-                     nextLevel(); // Call function to start next level/sentence
+                     nextLevel(); // Function to start the next sentence/level
                  } else {
                      console.log("Results: Next ignored (No next level/sentence available or unlocked).");
-                     // Optional: Visual feedback like shaking the button?
+                     // Optional: Add visual feedback like shaking the 'Next' paddle?
                  }
-             } else { // Sandbox mode
+             } else { // Sandbox mode has no 'Next' level concept
                  console.log("Results: Next ignored (Sandbox).");
              }
-        } else if (type === 'dah') { // Dah = Retry
+        }
+        // Dah maps to the 'Retry' action
+        else if (type === 'dah') {
             console.log("Results: Dah pressed - Attempting Retry");
-            retryLevel(); // Call function to retry current level/sentence
+            retryLevel(); // Function to retry the current sentence/level
         }
     }
 
     // --- Game Timer for Live Stats ---
     function startGameUpdateTimer() {
         stopGameUpdateTimer(); // Clear any existing interval
-        console.log("Starting game update timer...");
+        // console.log("Starting game update timer..."); // Debug
         gameTimerIntervalId = setInterval(() => {
+            // Only update if actively playing (listening, typing, decoding)
             if (gameState.isPlaying()) {
                 const elapsed = gameState.getCurrentElapsedTime();
                 uiManager.updateTimer(elapsed);
-                // // Calculate and update live stats (WPM, Acc) - Disabled for now to reduce calculation load
-                // // Use calculateScores which now handles live calculation correctly
-                // const liveStats = scoreCalculator.calculateLiveStats(gameState);
+                // Live WPM/Accuracy calculation can be CPU intensive, update less frequently or disable
+                // const liveStats = scoreCalculator.calculateLiveStats(gameState); // Needs implementation in scoreCalculator
                 // uiManager.updateWpmDisplay(liveStats.netWpm);
                 // uiManager.updateAccuracyDisplay(liveStats.accuracy);
-                // uiManager.updateGrossWpmDisplay(liveStats.grossWpm);
-            } else {
-                 // If no longer playing but timer is running, stop it
-                 // (Should be stopped by handleSentenceFinished, but as a safeguard)
-                 if(gameTimerIntervalId) {
-                    console.log("Game no longer playing, stopping update timer.");
-                    stopGameUpdateTimer();
-                 }
+            } else if (gameTimerIntervalId) {
+                 // If timer is running but game state is no longer 'playing', stop the timer.
+                 // This acts as a safeguard against orphaned timers.
+                 // console.log("Game no longer playing, stopping update timer."); // Debug
+                 stopGameUpdateTimer();
             }
-        }, 100); // Update 10 times per second
+        }, 100); // Update interval (e.g., 100ms for 10fps)
     }
 
     function stopGameUpdateTimer() {
         if (gameTimerIntervalId !== null) {
-            // console.log("Stopping game update timer.");
+            // console.log("Stopping game update timer."); // Debug
             clearInterval(gameTimerIntervalId);
             gameTimerIntervalId = null;
         }
@@ -419,15 +465,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Settings Handlers ---
     function applyWpmSetting(wpm) {
-        decoder.updateWpm(wpm);
-        audioPlayer.updateWpm(wpm);
-        if (inputHandler) inputHandler.updateWpm(wpm);
-        console.log(`WPM setting applied: ${wpm}`);
+        if (wpm > 0) {
+            decoder.updateWpm(wpm);
+            audioPlayer.updateWpm(wpm);
+            if (inputHandler) inputHandler.updateWpm(wpm); // Check if IH exists
+            console.log(`WPM setting applied: ${wpm}`);
+        }
     }
 
     function applyFrequencySetting(freq) {
-        audioPlayer.updateFrequency(freq);
-        console.log(`Frequency setting applied: ${freq} Hz`);
+        if (freq >= MorseConfig.AUDIO_MIN_FREQUENCY && freq <= MorseConfig.AUDIO_MAX_FREQUENCY) {
+            audioPlayer.updateFrequency(freq);
+            console.log(`Frequency setting applied: ${freq} Hz`);
+        }
     }
 
     function applySoundSetting(isEnabled) {
@@ -436,104 +486,136 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function applyDarkModeSetting(isEnabled) {
-        // Dark mode application is handled by UIManager directly
+        // Dark mode application is handled by UIManager directly via _applyDarkMode
         console.log(`Dark Mode setting applied: ${isEnabled}`);
     }
 
     function applyHintSetting(isVisible) {
-        // Hint application is handled by UIManager directly
+        // Hint application is handled by UIManager directly via _applyHintVisibility
         console.log(`Hint Visibility setting applied: ${isVisible}`);
     }
 
-    // Ensures modules have the latest settings, e.g., when starting a game
+    /** Ensures modules have the latest settings from UI/Storage, e.g., before starting a game. */
     function applyCurrentSettingsToModules() {
-        const currentWpm = uiManager.getInitialWpm(); // Gets from UIManager's state
+        // Get settings values directly from UIManager (which holds state loaded from storage)
+        const currentWpm = uiManager.getInitialWpm();
         const currentFreq = uiManager.getInitialFrequency();
-        if (!inputHandler) initializeInputHandler(); // Should already be initialized
-        if (!audioPlayer.onToneEndCallback) initializeAudioPlayerCallbacks(); // Ensure callback is set
+        const soundEnabled = uiManager.getInitialSoundState(); // Needed for audioPlayer check
+
+        // Ensure InputHandler is initialized
+        if (!inputHandler) initializeInputHandler();
+
+        // Apply settings
         applyWpmSetting(currentWpm);
         applyFrequencySetting(currentFreq);
-        // Sound/Dark/Hint are applied via UIManager or AudioPlayer directly
+        applySoundSetting(soundEnabled); // Ensure audio player state matches toggle
+
+        // Ensure audio context is ready if sound is enabled
+        if (soundEnabled) {
+             audioPlayer.initializeAudioContext();
+        }
+        // Dark Mode & Hint visibility are handled by UIManager CSS classes directly.
     }
 
     // --- Navigation/Action Helpers ---
     function retryLevel() {
-        if (gameState.currentMode === AppMode.GAME && gameState.currentLevelId !== null) {
+        // Check current mode and necessary state exists
+        if (gameState.currentMode === AppMode.GAME && gameState.currentLevelId !== null && gameState.currentSentenceIndex !== null) {
             console.log(`Retrying Level ${gameState.currentLevelId}, Sentence ${gameState.currentSentenceIndex + 1}`);
+            // Start the same level and sentence index again
             startGameLevel(gameState.currentLevelId, gameState.currentSentenceIndex);
         } else if (gameState.currentMode === AppMode.SANDBOX && gameState.currentSentence) {
             console.log("Retrying Sandbox sentence.");
-            startSandboxPractice();
+            // Restart the sandbox with the *same* sentence stored in gameState
+            startSandboxPractice(); // This uses gameState.currentSentence
         } else {
-            console.warn("Retry called invalid state, returning to level select.");
-            handleShowLevelSelect(); // Fallback
+            console.warn("Retry called in invalid state, returning to main menu.");
+            showMainMenu(); // Fallback to main menu if state is inconsistent
         }
     }
 
     function nextLevel() {
+        // Only applicable in Game mode
         if (gameState.currentMode !== AppMode.GAME || gameState.currentLevelId === null) {
-            console.warn("Next Level called outside Game mode, returning to level select.");
-            handleShowLevelSelect(); // Fallback
+            console.warn("Next Level called outside Game mode or without level ID, returning to main menu.");
+            showMainMenu(); // Fallback
             return;
         }
+
+        // Get details for the next potential step
         const next = levelManager.getNextSentence(gameState);
+
+        // Check if 'next' exists and the level it belongs to is unlocked
         if (next && levelManager.isLevelUnlocked(next.levelId)) {
             console.log(`Moving to next: Level ${next.levelId}, Sentence ${next.sentenceIndex + 1}`);
             startGameLevel(next.levelId, next.sentenceIndex);
         } else {
+            // No more sentences/levels, or next level is locked
             console.log("No next level/sentence available or unlocked, returning to level select.");
-            handleShowLevelSelect(); // Go back to level select if no more levels
+            handleShowLevelSelect(); // Go back to level select screen
         }
     }
 
     function resetProgress() {
         if (confirm("Reset all high scores and level progress? This cannot be undone.")) {
             levelManager.resetProgress();
-            // Reload settings in UI Manager and apply them
-            uiManager._loadSettings(); // Reloads from (now potentially empty) storage
-            applyInitialSettings(); // Apply the defaults or reloaded settings
-            // Update UI elements in settings modal (if open) or UIManager's internal state
+
+            // Reload settings in UI Manager (which re-reads localStorage) and apply them
+            uiManager._loadSettings();
+            applyInitialSettings(); // Apply the defaults or reloaded (cleared) settings
+
+            // Explicitly update UI elements in settings modal to reflect defaults
              uiManager._updateWpmDisplay(uiManager.getInitialWpm());
              uiManager._updateFrequencyDisplay(uiManager.getInitialFrequency());
+             if (uiManager.wpmSlider) uiManager.wpmSlider.value = uiManager.getInitialWpm();
+             if (uiManager.frequencySlider) uiManager.frequencySlider.value = uiManager.getInitialFrequency();
              if (uiManager.soundToggle) uiManager.soundToggle.checked = uiManager.getInitialSoundState();
              if (uiManager.darkModeToggle) uiManager.darkModeToggle.checked = uiManager.getInitialDarkModeState();
-             uiManager._applyDarkMode(uiManager.getInitialDarkModeState()); // Re-apply theme
-             uiManager._applyHintVisibility(uiManager.getInitialHintState()); // Re-apply hint visibility
+             // Re-apply theme and hint visibility based on potentially reset settings
+             uiManager._applyDarkMode(uiManager.getInitialDarkModeState());
+             uiManager._applyHintVisibility(uiManager.getInitialHintState());
 
-            // Close modal if open and go to level select
+            // Close settings modal if open and navigate to level select
             if (settingsModal && !settingsModal.modalElement.classList.contains('hidden')) {
-                settingsModal.close(); // This will trigger onClose -> showMainMenu
+                settingsModal.close(); // This will trigger onClose -> showMainMenu (or other logic if changed)
+                 // If modal close doesn't navigate correctly, force navigation:
+                 setTimeout(handleShowLevelSelect, 50); // Short delay after close
+            } else {
+                 handleShowLevelSelect(); // Navigate directly if modal wasn't open
             }
-            handleShowLevelSelect(); // Explicitly navigate after reset
             alert("Progress reset.");
         }
     }
 
     // --- Playback Mode Logic ---
     function playSentenceFromInput() {
+        // If already playing back, stop it
         if (gameState.isAudioPlayingBack()) {
-            audioPlayer.stopPlayback(); // Handles stopping audio and state change
-            uiManager.setPlaybackButtonEnabled(true, 'Play Morse');
-            // gameState status is updated by audioPlayer.stopPlayback
+            audioPlayer.stopPlayback(); // Handles stopping audio and state update
+            uiManager.setPlaybackButtonEnabled(true, 'Play Morse'); // Re-enable button
             return;
         }
 
         const sentence = uiManager.getPlaybackSentence();
         if (!sentence || !sentence.trim()) { alert("Please enter a sentence."); return; }
 
+        // Ensure settings are current before encoding/playing
+        applyCurrentSettingsToModules();
+
         const morseSequence = decoder.encodeSentence(sentence);
-        const displayMorse = morseSequence.replace(/\|/g, ' / ').replace(/\//g,' '); // Make readable
+        // Format for display (replace markers with visual separators)
+        const displayMorse = morseSequence.replace(/\|/g, ' / ').replace(/\//g,' ');
         uiManager.updatePlaybackMorseDisplay(displayMorse);
 
-        if (!morseSequence) { alert("Could not generate Morse code for this sentence."); return; }
+        if (!morseSequence) { alert("Could not generate Morse code for this sentence (check for unknown characters)."); return; }
 
-        uiManager.setPlaybackButtonEnabled(false, 'Stop Playback'); // Disable button, change text
-        // gameState status will be updated by audioPlayer.playMorseSequence
-        applyCurrentSettingsToModules(); // Ensure correct WPM/Freq for playback
+        uiManager.setPlaybackButtonEnabled(false, 'Stop Playback'); // Disable button during playback
+        // audioPlayer handles setting gameState status to PLAYING_BACK
+
         audioPlayer.playMorseSequence(morseSequence, () => {
-            // Completion Callback
-            uiManager.setPlaybackButtonEnabled(true, 'Play Morse');
-            // gameState status is updated by audioPlayer on completion
+            // --- Playback Completion Callback ---
+            uiManager.setPlaybackButtonEnabled(true, 'Play Morse'); // Re-enable button
+            // audioPlayer handles setting gameState status back (e.g., to PLAYBACK_INPUT)
             console.log("Playback complete.");
         });
     }
@@ -541,6 +623,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateSandboxPreview() {
         const sentence = uiManager.getSandboxSentence();
         if (sentence && sentence.trim()) {
+             // Ensure decoder has current WPM for potential timing hints (though not used in preview)
+            applyCurrentSettingsToModules();
             const morseSequence = decoder.encodeSentence(sentence);
             const displayMorse = morseSequence.replace(/\|/g, ' / ').replace(/\//g,' ');
             uiManager.updateSandboxMorsePreview(displayMorse);

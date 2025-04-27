@@ -6,6 +6,7 @@
  * themes, event listeners, and results screen management including star rating
  * and paddle label changes.
  * Includes fixes for fixed cursor/scrolling text and correct input feedback.
+ * Uses separate timeouts for correct/incorrect feedback.
  */
 
 class UIManager {
@@ -102,8 +103,11 @@ class UIManager {
         this.isSoundEnabled = true;
         this.isDarkModeEnabled = false;
         this.isHintVisible = MorseConfig.HINT_DEFAULT_VISIBLE;
-        this._incorrectFlashTimeout = null;
-        this._feedbackTimeout = null; // Shared timeout for correct/incorrect pattern flash
+        // --- Separate Timeouts for feedback ---
+        this._incorrectFlashTimeout = null; // Timeout for incorrect character flash
+        this._incorrectPatternTimeout = null; // Timeout for incorrect pattern flash
+        this._correctPatternTimeout = null; // Timeout for correct pattern flash
+        // --- End Separate Timeouts ---
         this.ditSvgString = `<svg class="pattern-dit" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg"><circle cx="25" cy="25" r="15" /></svg>`;
         this.dahSvgString = `<svg class="pattern-dah" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="20" width="30" height="10" rx="3"/></svg>`;
 
@@ -135,8 +139,6 @@ class UIManager {
         this.mainMenuOverlay?.classList.add('hidden');
         this.resultsScreen?.classList.add('hidden');
         this.levelSelectionScreen?.classList.add('hidden');
-        // Note: Modal visibility is handled by the Modal class itself
-        // this.settingsModal?.classList.add('hidden'); // Don't control modal visibility here directly
     }
 
     showMainMenu() {
@@ -174,8 +176,6 @@ class UIManager {
         }
         console.log("UI: Showing Sandbox Setup Interface");
     }
-
-    // Settings are shown/hidden by the Modal instance via callbacks in main.js
 
     showLevelSelectionScreen(levelsWithStatus) {
         console.log("UI: Attempting to show Level Selection Screen...");
@@ -279,28 +279,46 @@ class UIManager {
 
     /**
      * Sets the visual state (default, correct, incorrect) for the pattern containers.
+     * Uses separate timeouts for correct and incorrect feedback.
      * @param {'default' | 'correct' | 'incorrect'} state - The state to apply.
      */
     setPatternDisplayState(state) {
         if (!this.targetPatternContainer || !this.userPatternContainer) return;
-        if (this._feedbackTimeout) clearTimeout(this._feedbackTimeout);
+
+        // Clear any existing timeouts for the type of feedback we *aren't* setting
+        if (state !== 'correct' && this._correctPatternTimeout) {
+            clearTimeout(this._correctPatternTimeout);
+            this._correctPatternTimeout = null;
+        }
+        if (state !== 'incorrect' && this._incorrectPatternTimeout) {
+            clearTimeout(this._incorrectPatternTimeout);
+            this._incorrectPatternTimeout = null;
+        }
 
         const containers = [this.targetPatternContainer, this.userPatternContainer];
-        // Remove previous states
+        // Remove previous feedback states explicitly before adding new one
         containers.forEach(c => c.classList.remove('correct-pattern', 'incorrect-pattern'));
 
-        if (state === 'correct' || state === 'incorrect') {
-            const className = state === 'correct' ? 'correct-pattern' : 'incorrect-pattern';
-            // Apply the new state class
-            containers.forEach(c => c.classList.add(className));
-
-            // Set a timeout to revert to default state
-            this._feedbackTimeout = setTimeout(() => {
-                containers.forEach(c => c.classList.remove(className));
-                this._feedbackTimeout = null;
-            }, MorseConfig.INCORRECT_FLASH_DURATION); // Use the same duration for both
+        if (state === 'correct') {
+            // Apply the correct state class
+            containers.forEach(c => c.classList.add('correct-pattern'));
+            // Set a timeout to remove the correct class
+            this._correctPatternTimeout = setTimeout(() => {
+                containers.forEach(c => c.classList.remove('correct-pattern'));
+                this._correctPatternTimeout = null;
+            }, MorseConfig.INCORRECT_FLASH_DURATION); // Use same duration for simplicity
+        } else if (state === 'incorrect') {
+            // Apply the incorrect state class
+            containers.forEach(c => c.classList.add('incorrect-pattern'));
+            // Set a timeout to remove the incorrect class
+            this._incorrectPatternTimeout = setTimeout(() => {
+                containers.forEach(c => c.classList.remove('incorrect-pattern'));
+                this._incorrectPatternTimeout = null;
+            }, MorseConfig.INCORRECT_FLASH_DURATION);
         }
+        // If state is 'default', we just remove the classes (already done above)
     }
+
 
     /**
      * Renders the sentence text into the display area.
@@ -378,26 +396,23 @@ class UIManager {
             // Add the new state class
             charSpan.classList.add(state);
 
-            // Handle incorrect flash timeout
+            // Handle incorrect flash timeout for the character span
             if (state === 'incorrect') {
                 if (this._incorrectFlashTimeout) clearTimeout(this._incorrectFlashTimeout);
                 this._incorrectFlashTimeout = setTimeout(() => {
-                    // Only revert if it's *still* incorrect (might have been corrected quickly)
                     if (charSpan.classList.contains('incorrect')) {
                         charSpan.classList.remove('incorrect');
-                        // Decide which state to revert to (usually current or pending)
-                        const currentGameState = window.morseGameState; // Check game state
+                        const currentGameState = window.morseGameState;
                         if (currentGameState && currentGameState.currentCharIndex === charIndex &&
                             (currentGameState.isPlaying() || currentGameState.status === GameStatus.READY)) {
-                            charSpan.classList.add('current'); // Revert to current if still the target
+                            charSpan.classList.add('current');
                         } else {
-                            charSpan.classList.add('pending'); // Otherwise, revert to pending
+                            charSpan.classList.add('pending');
                         }
                     }
                     this._incorrectFlashTimeout = null;
                 }, MorseConfig.INCORRECT_FLASH_DURATION);
             } else if (this._incorrectFlashTimeout && charSpan.classList.contains('incorrect')) {
-                // If state changes *from* incorrect before timeout, clear the timeout
                 clearTimeout(this._incorrectFlashTimeout);
                 this._incorrectFlashTimeout = null;
             }
@@ -415,28 +430,23 @@ class UIManager {
      * @param {string} targetChar - The actual character to highlight (raw case).
      */
     highlightCharacter(currentIdx, targetChar) {
-        // Remove 'current' from previously highlighted span
         const prevSpan = this.textDisplay?.querySelector('.char.current');
         if (prevSpan && prevSpan.dataset.index != currentIdx) {
-            // Check if previous was completed or incorrect to avoid reverting state
             if (!prevSpan.classList.contains('incorrect') && !prevSpan.classList.contains('completed')) {
                 prevSpan.classList.remove('current');
-                prevSpan.classList.add('pending'); // Revert to pending if not error/complete
+                prevSpan.classList.add('pending');
             } else {
-                prevSpan.classList.remove('current'); // Just remove current if it was already done/error
+                prevSpan.classList.remove('current');
             }
         }
 
-        // Update the state of the new current character (this also centers it)
         this.updateCharacterState(currentIdx, 'current');
 
-        // Update the target Morse pattern display
         if (window.morseDecoder) {
             const morseSequence = window.morseDecoder.encodeCharacter(targetChar);
-            this.updateTargetPatternDisplay(morseSequence ?? ""); // Show Morse or clear if null
+            this.updateTargetPatternDisplay(morseSequence ?? "");
         }
 
-        // Clear the user's input pattern display
         this.updateUserPatternDisplay("");
         this.setPatternDisplayState('default'); // Reset pattern feedback
     }
@@ -452,30 +462,18 @@ class UIManager {
         if (!container || !element || !textDisplay) return;
 
         requestAnimationFrame(() => {
-            // Re-query the element in case the DOM updated
             const currentElement = textDisplay.querySelector(`.char[data-index="${element.dataset.index}"]`);
             if (!currentElement) return;
 
             const containerRect = container.getBoundingClientRect();
             const elementRect = currentElement.getBoundingClientRect();
-
-            // Calculate the horizontal center of the container
             const containerCenter = containerRect.left + containerRect.width / 2;
-
-            // Calculate the horizontal center of the target element
             const elementCenter = elementRect.left + elementRect.width / 2;
-
-            // Calculate the difference - how much we need to shift the *container's scroll*
             const scrollAdjustment = elementCenter - containerCenter;
-
-            // Calculate the new target scrollLeft position
             let targetScrollLeft = container.scrollLeft + scrollAdjustment;
-
-            // Clamp the scroll position to valid bounds
             const maxScrollLeft = container.scrollWidth - containerRect.width;
             targetScrollLeft = Math.max(0, Math.min(targetScrollLeft, maxScrollLeft));
 
-            // Scroll smoothly if the adjustment is significant enough
             if (Math.abs(container.scrollLeft - targetScrollLeft) > 1) {
                 container.scrollTo({
                     left: targetScrollLeft,
@@ -490,13 +488,13 @@ class UIManager {
     updateWpmDisplay(netWpm) { if(this.wpmDisplay) this.wpmDisplay.textContent = `Net WPM: ${netWpm.toFixed(0)}`; }
     updateAccuracyDisplay(accuracy) { if(this.accuracyDisplay) this.accuracyDisplay.textContent = `Accuracy: ${accuracy.toFixed(1)}%`; }
     updateGrossWpmDisplay(grossWpm) { if(this.grossWpmDisplay) this.grossWpmDisplay.textContent = `Gross WPM: ${grossWpm.toFixed(0)}`; }
-    resetStatsDisplay() { this.updateTimer(0); this.updateWpmDisplay(0); this.updateAccuracyDisplay(100); this.updateGrossWpmDisplay(0); this.updateTargetPatternDisplay(""); this.updateUserPatternDisplay(""); this.setPatternDisplayState('default'); this._applyHintVisibility(this.isHintVisible); } // Added hint reset here
+    resetStatsDisplay() { this.updateTimer(0); this.updateWpmDisplay(0); this.updateAccuracyDisplay(100); this.updateGrossWpmDisplay(0); this.updateTargetPatternDisplay(""); this.updateUserPatternDisplay(""); this.setPatternDisplayState('default'); this._applyHintVisibility(this.isHintVisible); }
 
     // --- Settings ---
     _updateWpmDisplay(wpm) { if(this.wpmValueDisplay) this.wpmValueDisplay.textContent = wpm; }
     _updateFrequencyDisplay(freq) { if(this.frequencyValueDisplay) this.frequencyValueDisplay.textContent = freq; }
     _saveSettings() { try { localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_WPM, this.currentWpm); localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_SOUND, this.isSoundEnabled); localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_DARK_MODE, this.isDarkModeEnabled); localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_FREQUENCY, this.currentFrequency); localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_HINT_VISIBLE, this.isHintVisible); } catch (e) { console.error("Error saving settings:", e); } }
-    _loadSettings() { try { const savedWpm = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_WPM); const savedSound = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_SOUND); const savedDarkMode = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_DARK_MODE); const savedFrequency = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_FREQUENCY); const savedHintVisible = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_HINT_VISIBLE); this.currentWpm = savedWpm !== null ? parseInt(savedWpm, 10) : MorseConfig.DEFAULT_WPM; this.isSoundEnabled = savedSound !== null ? JSON.parse(savedSound) : true; this.isDarkModeEnabled = savedDarkMode !== null ? JSON.parse(savedDarkMode) : false; this.currentFrequency = savedFrequency !== null ? parseInt(savedFrequency, 10) : MorseConfig.AUDIO_DEFAULT_TONE_FREQUENCY; this.isHintVisible = savedHintVisible !== null ? JSON.parse(savedHintVisible) : MorseConfig.HINT_DEFAULT_VISIBLE; this.currentFrequency = Math.max(MorseConfig.AUDIO_MIN_FREQUENCY, Math.min(MorseConfig.AUDIO_MAX_FREQUENCY, this.currentFrequency)); /* Update UI elements */ } catch (e) { console.error("Error loading settings:", e); /* Reset to defaults on error */ this.currentWpm = MorseConfig.DEFAULT_WPM; this.isSoundEnabled = true; this.isDarkModeEnabled = false; this.currentFrequency = MorseConfig.AUDIO_DEFAULT_TONE_FREQUENCY; this.isHintVisible = MorseConfig.HINT_DEFAULT_VISIBLE; } /* Update UI elements after load/error */ this._updateWpmDisplay(this.currentWpm); this._updateFrequencyDisplay(this.currentFrequency); if(this.wpmSlider) this.wpmSlider.value = this.currentWpm; if(this.frequencySlider) this.frequencySlider.value = this.currentFrequency; if(this.soundToggle) this.soundToggle.checked = this.isSoundEnabled; if(this.darkModeToggle) this.darkModeToggle.checked = this.isDarkModeEnabled; }
+    _loadSettings() { try { const savedWpm = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_WPM); const savedSound = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_SOUND); const savedDarkMode = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_DARK_MODE); const savedFrequency = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_FREQUENCY); const savedHintVisible = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_HINT_VISIBLE); this.currentWpm = savedWpm !== null ? parseInt(savedWpm, 10) : MorseConfig.DEFAULT_WPM; this.isSoundEnabled = savedSound !== null ? JSON.parse(savedSound) : true; this.isDarkModeEnabled = savedDarkMode !== null ? JSON.parse(savedDarkMode) : false; this.currentFrequency = savedFrequency !== null ? parseInt(savedFrequency, 10) : MorseConfig.AUDIO_DEFAULT_TONE_FREQUENCY; this.isHintVisible = savedHintVisible !== null ? JSON.parse(savedHintVisible) : MorseConfig.HINT_DEFAULT_VISIBLE; this.currentFrequency = Math.max(MorseConfig.AUDIO_MIN_FREQUENCY, Math.min(MorseConfig.AUDIO_MAX_FREQUENCY, this.currentFrequency)); } catch (e) { console.error("Error loading settings:", e); this.currentWpm = MorseConfig.DEFAULT_WPM; this.isSoundEnabled = true; this.isDarkModeEnabled = false; this.currentFrequency = MorseConfig.AUDIO_DEFAULT_TONE_FREQUENCY; this.isHintVisible = MorseConfig.HINT_DEFAULT_VISIBLE; } this._updateWpmDisplay(this.currentWpm); this._updateFrequencyDisplay(this.currentFrequency); if(this.wpmSlider) this.wpmSlider.value = this.currentWpm; if(this.frequencySlider) this.frequencySlider.value = this.currentFrequency; if(this.soundToggle) this.soundToggle.checked = this.isSoundEnabled; if(this.darkModeToggle) this.darkModeToggle.checked = this.isDarkModeEnabled; }
     setButtonActive(buttonType, isActive) { const button = buttonType === 'dit' ? this.ditButton : this.dahButton; if (button) button.classList.toggle('active', isActive); }
 
     /** Updates paddle content for game vs results mode. */
@@ -510,14 +508,10 @@ class UIManager {
         if (mode === 'results') {
             labels[0].textContent = "Next"; // Dit = Next
             labels[1].textContent = "Retry"; // Dah = Retry
-
-            // Disable "Next" if in sandbox or no next level available/unlocked
             const isNextDisabled = (gameMode === AppMode.SANDBOX || !hasNextLevel);
             buttons[0].disabled = isNextDisabled;
             buttons[1].disabled = false; // Retry is always enabled
-
             buttons.forEach(btn => btn.classList.add('results-label-active'));
-
         } else { // Game mode
             labels[0].textContent = "";
             labels[1].textContent = "";
@@ -529,10 +523,10 @@ class UIManager {
 
     setPlaybackButtonEnabled(enabled, text = 'Play Morse') { if (this.playSentenceButton) { this.playSentenceButton.disabled = !enabled; this.playSentenceButton.textContent = text; } }
     _applyDarkMode(enable) { this.bodyElement.classList.toggle('dark-mode', enable); }
-    _applyHintVisibility(visible) { this.targetPatternOuterWrapper?.classList.toggle('hint-hidden', !visible); this.toggleHintButton?.setAttribute('aria-pressed', visible); } // Update ARIA state
+    _applyHintVisibility(visible) { this.targetPatternOuterWrapper?.classList.toggle('hint-hidden', !visible); this.toggleHintButton?.setAttribute('aria-pressed', visible); }
 
     addEventListeners(callbacks) {
-        // Main Menu - Settings button handled by Modal class constructor
+        // Main Menu
         this.startGameButton?.addEventListener('click', callbacks.onShowLevelSelect);
         this.showSandboxButton?.addEventListener('click', callbacks.onShowSandbox);
         this.showPlaybackButton?.addEventListener('click', callbacks.onShowPlayback);
@@ -546,7 +540,7 @@ class UIManager {
         this.sandboxInput?.addEventListener('input', callbacks.onSandboxInputChange);
         this.sandboxMenuButton?.addEventListener('click', callbacks.onShowMainMenu);
 
-        // Level Selection Screen - Listener for level buttons
+        // Level Selection
         this.levelListContainer?.addEventListener('click', (e) => {
             if (e.target.tagName === 'BUTTON' && e.target.classList.contains('level-button') && !e.target.disabled) {
                 const levelId = parseInt(e.target.dataset.levelId, 10);
@@ -555,11 +549,11 @@ class UIManager {
         });
         this.levelSelectMenuButton?.addEventListener('click', callbacks.onShowMainMenu);
 
-        // Results Screen Buttons
+        // Results Screen
         this.levelSelectButton?.addEventListener('click', callbacks.onShowLevelSelect);
         this.resultsMenuButton?.addEventListener('click', callbacks.onShowMainMenu);
 
-        // Settings (inside Modal Content) - listeners attached here
+        // Settings Modal Content
         this.wpmSlider?.addEventListener('input', (e) => this._updateWpmDisplay(parseInt(e.target.value, 10)));
         this.wpmSlider?.addEventListener('change', (e) => { this.currentWpm = parseInt(e.target.value, 10); this._saveSettings(); if (callbacks.onWpmChange) callbacks.onWpmChange(this.currentWpm); });
         this.frequencySlider?.addEventListener('input', (e) => this._updateFrequencyDisplay(parseInt(e.target.value, 10)));
@@ -568,10 +562,8 @@ class UIManager {
         this.darkModeToggle?.addEventListener('change', (e) => { this.isDarkModeEnabled = e.target.checked; this._applyDarkMode(this.isDarkModeEnabled); this._saveSettings(); if (callbacks.onDarkModeToggle) callbacks.onDarkModeToggle(this.isDarkModeEnabled); });
         this.resetProgressButton?.addEventListener('click', () => { if (callbacks.onResetProgress) callbacks.onResetProgress(); });
 
-        // Hint Toggle Button (Game UI)
+        // Game UI
         this.toggleHintButton?.addEventListener('click', () => { this.isHintVisible = !this.isHintVisible; this._applyHintVisibility(this.isHintVisible); this._saveSettings(); if (callbacks.onHintToggle) callbacks.onHintToggle(this.isHintVisible); });
-
-        // Game Menu Button
         this.gameMenuButton?.addEventListener('click', callbacks.onShowMainMenu);
 
         // Resize handler

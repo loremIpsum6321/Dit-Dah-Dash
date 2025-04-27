@@ -2,7 +2,7 @@
  * js/audioPlayer.js
  * -----------------
  * Handles audio feedback and Morse sequence playback using the Web Audio API.
- * Allows adjustment of WPM and tone frequency.
+ * Allows adjustment of WPM and tone frequency. Includes fixes for feedback sounds.
  */
 
 class AudioPlayer {
@@ -27,6 +27,7 @@ class AudioPlayer {
 
         // Playback state
         this.playbackNodes = []; // Stores { osc, gain } for sequence playback
+        this.feedbackNodes = []; // Stores { osc, gain } for feedback sounds
         this.playbackCompletionTimeoutId = null;
         this.isCurrentlyPlayingBack = false;
 
@@ -115,9 +116,10 @@ class AudioPlayer {
              this.masterGainNode.gain.cancelScheduledValues(this.audioContext.currentTime);
              this.masterGainNode.gain.linearRampToValueAtTime(this.isSoundEnabled ? 1 : 0, this.audioContext.currentTime + this.rampTime * 2);
         }
-        // Stop any ongoing playback if sound is disabled
+        // Stop any ongoing playback and feedback if sound is disabled
         if (!enabled) {
             this.stopPlayback();
+            this.stopFeedbackSounds(); // Also stop feedback sounds
         }
     }
 
@@ -265,10 +267,12 @@ class AudioPlayer {
                     // Ramp down gain quickly and stop oscillator
                     if (gain?.gain) {
                         gain.gain.cancelScheduledValues(now);
-                        gain.gain.linearRampToValueAtTime(0, now + this.rampTime * 2);
+                        // Use setValueAtTime for immediate silence, then ramp (prevents lingering tone if stopped mid-ramp)
+                        gain.gain.setValueAtTime(gain.gain.value, now);
+                        gain.gain.linearRampToValueAtTime(0, now + this.rampTime);
                     }
                     if (osc) {
-                        osc.stop(now + this.rampTime * 2 + 0.01); // Stop slightly after gain hits zero
+                        osc.stop(now + this.rampTime + 0.01); // Stop slightly after gain hits zero
                         // Ensure cleanup happens even if stopped early
                         osc.onended = () => { try { osc.disconnect(); gain?.disconnect(); } catch(e){} };
                     }
@@ -291,26 +295,58 @@ class AudioPlayer {
          }
     }
 
-    // --- Optional Feedback Sounds ---
+    // --- Feedback Sounds ---
+
+    /** Stops any currently playing feedback sounds immediately. */
+    stopFeedbackSounds() {
+         if (this.feedbackNodes.length > 0 && this.audioContext) {
+             console.log(`Stopping ${this.feedbackNodes.length} active feedback sounds.`);
+             const now = this.audioContext.currentTime;
+             this.feedbackNodes.forEach(({ osc, gain }) => {
+                 try {
+                     if (gain?.gain) {
+                        gain.gain.cancelScheduledValues(now);
+                        gain.gain.setValueAtTime(gain.gain.value, now); // Set current value
+                        gain.gain.linearRampToValueAtTime(0, now + this.rampTime); // Ramp down quickly
+                     }
+                     if (osc) {
+                         osc.stop(now + this.rampTime + 0.01);
+                         osc.onended = () => { try { osc.disconnect(); gain?.disconnect(); } catch(e){} };
+                     }
+                 } catch (e) {
+                     console.warn("Error stopping feedback audio node:", e);
+                     try { osc?.disconnect(); gain?.disconnect(); } catch(e2){}
+                 }
+             });
+             this.feedbackNodes = []; // Clear the array
+         }
+     }
 
     /** Plays a short, higher-pitched sound for correct feedback. */
     playCorrectSound() {
-        this._playFeedbackSound(this.toneFrequency * 0, 0);
+        // Corrected: Use a frequency slightly higher than the base tone, not 0 Hz.
+        this._playFeedbackSound(this.toneFrequency * 1.5, 0.05); // Example: 1.5x base freq, 50ms duration
     }
 
     /** Plays a slightly longer, lower-pitched sound for incorrect feedback. */
     playIncorrectSound() {
-        this._playFeedbackSound(this.toneFrequency * 0.5, 0.08);
+        this._playFeedbackSound(this.toneFrequency * 0.7, 0.1); // Example: 0.7x base freq, 100ms duration
     }
 
     /**
      * Internal helper to play simple feedback sounds.
-     * @param {number} frequency - The frequency of the feedback tone.
+     * @param {number} frequency - The frequency of the feedback tone. Must be > 0.
      * @param {number} durationSeconds - The duration of the feedback tone.
      * @private
      */
     _playFeedbackSound(frequency, durationSeconds) {
-        if (!this.isSoundEnabled || !this.initializeAudioContext() || !this.masterGainNode) return;
+        if (!this.isSoundEnabled || !this.initializeAudioContext() || !this.masterGainNode || frequency <= 0) {
+            if (frequency <= 0) console.warn("Attempted to play feedback sound with frequency <= 0 Hz.");
+            return;
+        }
+
+        this.stopFeedbackSounds(); // Stop any previous feedback sounds first
+
         try {
             const now = this.audioContext.currentTime;
             const osc = this.audioContext.createOscillator();
@@ -319,18 +355,27 @@ class AudioPlayer {
             osc.frequency.setValueAtTime(frequency, now);
 
             // Simple gain envelope for feedback
+            const feedbackGainLevel = 0.5; // Quieter than Morse tone
             gain.gain.setValueAtTime(0, now);
-            gain.gain.linearRampToValueAtTime(0.5, now + this.rampTime); // Quieter than Morse tone
-            gain.gain.setValueAtTime(0.5, now + durationSeconds - this.rampTime);
+            gain.gain.linearRampToValueAtTime(feedbackGainLevel, now + this.rampTime);
+            gain.gain.setValueAtTime(feedbackGainLevel, now + durationSeconds - this.rampTime);
             gain.gain.linearRampToValueAtTime(0, now + durationSeconds);
 
             osc.connect(gain);
             gain.connect(this.masterGainNode);
 
             osc.start(now);
-            osc.stop(now + durationSeconds + 0.01);
-            // Auto-cleanup
-            osc.onended = () => { try { osc.disconnect(); gain.disconnect(); } catch(e){} };
+            osc.stop(now + durationSeconds + this.rampTime + 0.01); // Stop after ramp down
+
+            // Track this feedback sound node
+            const nodeRef = { osc, gain };
+            this.feedbackNodes.push(nodeRef);
+
+            // Auto-cleanup and removal from tracking
+            osc.onended = () => {
+                this.feedbackNodes = this.feedbackNodes.filter(n => n !== nodeRef);
+                try { osc.disconnect(); gain.disconnect(); } catch(e){}
+            };
         } catch (error) {
             console.error("Error playing feedback sound:", error);
         }

@@ -16,7 +16,8 @@
         <div id="display-area">
 
             <div id="game-ui-wrapper" class="hidden">
-                <div id="text-display-wrapper">
+                 <button id="game-menu-button" class="menu-nav-button" title="Main Menu">☰ Menu</button>
+                 <div id="text-display-wrapper">
                     <div id="text-display"></div>
                 </div>
                  <div id="target-pattern-outer-wrapper">
@@ -39,7 +40,6 @@
                 </div>
                  <div id="user-pattern-container" class="pattern-container">
                     </div>
-
                 <div id="stats-display">
                     <div id="timer-display">Time: 00:00.0</div>
                     <div id="wpm-display">Net WPM: 0</div>
@@ -49,36 +49,21 @@
             </div>
 
             <div id="playback-area" class="hidden">
+                 <button id="playback-menu-button" class="menu-nav-button" title="Main Menu">☰ Menu</button>
                  <h2>Sentence Playback</h2>
                  <label for="playback-input">Enter text to play:</label>
                  <input type="text" id="playback-input" placeholder="Type sentence here...">
                  <button id="play-sentence-button">Play Morse</button>
                  <div id="playback-morse-display" title="Generated Morse (for reference)"></div>
-                 <button id="playback-back-button" class="back-button">Back to Menu</button>
             </div>
 
             <div id="sandbox-area" class="hidden">
+                <button id="sandbox-menu-button" class="menu-nav-button" title="Main Menu">☰ Menu</button>
                 <h2>Custom Sentence Sandbox</h2>
                 <label for="sandbox-input">Enter your sentence:</label>
                 <input type="text" id="sandbox-input" placeholder="Type sentence here...">
                 <button id="start-sandbox-button">Start Practice</button>
                 <div id="sandbox-morse-preview" title="Morse Preview (for reference)"></div>
-                <button id="sandbox-back-button" class="back-button">Back to Menu</button>
-            </div>
-
-            <div id="settings-area">
-                 <button id="settings-toggle-button" title="Settings">⚙️</button>
-                 <div id="settings-controls" class="hidden">
-                     <label for="wpm-slider">WPM: <span id="wpm-value-display">20</span></label>
-                     <input type="range" id="wpm-slider" min="5" max="40" value="20">
-                     <label for="frequency-slider">Tone (Hz): <span id="frequency-value-display">600</span></label>
-                     <input type="range" id="frequency-slider" min="400" max="1000" value="600">
-                     <label for="sound-toggle">Sound:</label>
-                     <input type="checkbox" id="sound-toggle" checked>
-                     <label for="dark-mode-toggle">Dark Mode:</label>
-                     <input type="checkbox" id="dark-mode-toggle">
-                     <button id="reset-progress-button">Reset Progress</button>
-                 </div>
             </div>
 
             <div id="main-menu-overlay" class="overlay">
@@ -86,42 +71,60 @@
                 <button id="start-game-button">Start Game</button>
                 <button id="show-sandbox-button">Sandbox Mode</button>
                 <button id="show-playback-button">Sentence Playback</button>
+                <button id="show-settings-button">Settings ⚙️</button>
+            </div>
+
+            <div id="settings-controls" class="hidden overlay settings-overlay">
+                 <button id="settings-back-button" class="menu-nav-button settings-back">← Back</button>
+                 <h2>Settings</h2>
+                 <label for="wpm-slider">WPM: <span id="wpm-value-display">20</span></label>
+                 <input type="range" id="wpm-slider" min="5" max="40" value="20">
+                 <label for="frequency-slider">Tone (Hz): <span id="frequency-value-display">600</span></label>
+                 <input type="range" id="frequency-slider" min="400" max="1000" value="600">
+                 <label for="sound-toggle">Sound:</label>
+                 <input type="checkbox" id="sound-toggle" checked>
+                 <label for="dark-mode-toggle">Dark Mode:</label>
+                 <input type="checkbox" id="dark-mode-toggle">
+                 <button id="reset-progress-button">Reset Progress</button>
             </div>
 
             <div id="results-screen" class="hidden overlay">
+                <button id="results-menu-button" class="menu-nav-button" title="Main Menu">☰ Menu</button>
                 <h2>Sentence Complete!</h2>
+                <p>Use paddles below:</p>
+                <p>Dit (.) for Next, Dah (-) for Retry</p>
                 <p id="results-time"></p>
                 <p id="results-net-wpm"></p>
                 <p id="results-gross-wpm"></p>
                 <p id="results-accuracy"></p>
                 <p id="level-unlock-message"></p>
                 <div>
-                    <button id="next-level-button">Next Level</button>
-                    <button id="retry-button">Retry Level</button>
                     <button id="level-select-button">Level Select</button>
-                     <button id="main-menu-results-button">Main Menu</button> </div>
-                 </div>
+                </div>
+            </div>
 
             <div id="level-selection-screen" class="hidden overlay">
-                <h2>Select Level</h2>
+                <button id="level-select-menu-button" class="menu-nav-button" title="Main Menu">☰ Menu</button>
+                 <h2>Select Level</h2>
                 <div id="level-list"></div>
-                 <button id="level-select-back-button" class="back-button">Back to Menu</button>
             </div>
 
         </div> <div id="input-area" class="hidden">
             <button id="dit-button" class="morse-button">
                 <svg viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg"><circle cx="25" cy="25" r="15" /></svg>
-            </button>
+                <span class="paddle-label"></span> </button>
             <button id="dah-button" class="morse-button">
                 <svg viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="20" width="30" height="10" rx="3"/></svg>
-            </button>
-        </div> </div> <script src="js/config.js"></script>
+                 <span class="paddle-label"></span> </button>
+        </div>
+
+    </div> <script src="js/config.js"></script>
     <script src="js/audioPlayer.js"></script>
     <script src="js/gameState.js"></script>
     <script src="js/scoreCalculator.js"></script>
     <script src="js/levelManager.js"></script>
-    <script src="js/uiManager.js"></script>
     <script src="js/morseDecoder.js"></script>
+    <script src="js/uiManager.js"></script>
     <script src="js/inputHandler.js"></script>
     <script src="js/main.js"></script>
 

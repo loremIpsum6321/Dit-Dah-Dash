@@ -2,13 +2,14 @@
  * js/gameState.js
  * ---------------
  * Manages the state of the application, including game progress, playback state,
- * timing, current input, and mode (Game, Sandbox, Playback, Menu).
+ * timing, current input, and mode (Game, Sandbox, Playback, Menu, Settings).
  */
 
 // Defines the possible states of the application (focusing on activity)
 const GameStatus = {
     IDLE: 'idle',                   // App is idle, main menu likely shown
     MENU: 'menu',                   // Main menu is actively displayed
+    SETTINGS: 'settings',           // Settings modal is open
     LEVEL_SELECT: 'level_select',   // Level selection screen is active
     READY: 'ready',                 // Sentence loaded (game/sandbox), waiting for first input
     LISTENING: 'listening',         // Actively listening for first dit/dah (game/sandbox)
@@ -25,6 +26,7 @@ const GameStatus = {
 // Defines the current operational mode
 const AppMode = {
     MENU: 'menu',
+    SETTINGS: 'settings',   // Indicates the settings modal is the focus
     GAME: 'game',           // Standard level progression
     SANDBOX: 'sandbox',     // Custom sentence practice
     PLAYBACK: 'playback'    // Sentence audio playback tool
@@ -157,7 +159,10 @@ class GameState {
     /** Updates the game/sandbox input sequence. */
     addInput(input) {
         const now = performance.now();
-        this.totalInputs++; // Track game/sandbox inputs
+        // Only count inputs if actually in a playing state
+        if (this.isPlaying() || this.status === GameStatus.READY) {
+            this.totalInputs++; // Track game/sandbox inputs
+        }
         this.inputTimestamps.push({ input, time: now });
         this.lastInputTime = now;
 
@@ -183,7 +188,6 @@ class GameState {
         this.clearCharacterTimeout();
         if (window.morseUIManager) { // Update UI accordingly
              window.morseUIManager.updateUserPatternDisplay("");
-             // window.morseUIManager.updateInputSequenceDisplay(""); // Text display removed
              window.morseUIManager.setPatternDisplayState('default');
         }
         // Reset to listening state only if actively playing game/sandbox characters
@@ -217,7 +221,9 @@ class GameState {
         } else {
             console.log(`Moved to character index: ${this.currentCharIndex} ('${this.getTargetCharacter()}')`);
             // Set state back to LISTENING explicitly after moving
-            this.status = GameStatus.LISTENING;
+            if (this.status !== GameStatus.FINISHED && this.status !== GameStatus.SHOWING_RESULTS) {
+                this.status = GameStatus.LISTENING;
+            }
             return true; // More characters remain
         }
     }

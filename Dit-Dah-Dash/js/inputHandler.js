@@ -3,8 +3,10 @@
  * ------------------
  * Handles user input from main Dit/Dah paddles (touch/mouse/keyboard).
  * Implements automatic repetition and Iambic B keying for game/sandbox.
+ * Triggers discrete audio tones for each generated Morse element.
  * Handles separate input logic for RESULTS mode using the same paddles.
  * Ensures correct visual feedback for keyboard input.
+ * Fixes call to audioPlayer for input tones.
  */
 
 class InputHandler {
@@ -31,53 +33,53 @@ class InputHandler {
         this.dahButton = document.getElementById('dah-button');
         this.playbackInput = document.getElementById('playback-input'); // To ignore kbd focus
         this.sandboxInput = document.getElementById('sandbox-input');   // To ignore kbd focus
+        this.settingsModal = document.getElementById('settings-modal'); // To ignore kbd focus when modal open
 
         // Input State
         this.ditPressed = false;      // Mouse/Touch
         this.dahPressed = false;      // Mouse/Touch
-        this.ditKeyPressed = false;   // Keyboard '.' or 'e'
-        this.dahKeyPressed = false;   // Keyboard '-' or 't'
+        this.ditKeyPressed = false;   // Keyboard '.' or 'e' or '0'
+        this.dahKeyPressed = false;   // Keyboard '-' or 't' or 'T'
 
         this.pressStartTime = { dit: 0, dah: 0 };
         this.lastInputTypeGenerated = null; // 'dit' or 'dah'
-        this.lastDitEmitTime = 0;
-        this.lastDahEmitTime = 0;
+        this.lastDitEmitTime = 0; // Timestamp for game/sandbox *sequence* input
+        this.lastDahEmitTime = 0; // Timestamp for game/sandbox *sequence* input
 
-        // Timing (derived from WPM)
+        // Timing (derived from WPM) - Used for sequence generation timing
         this.wpm = MorseConfig.DEFAULT_WPM;
-        this.ditDuration = 0;
-        this.dahDuration = 0;
-        this.intraCharGap = 0;
+        this.ditDuration = 0; // ms - duration of the sound/element
+        this.dahDuration = 0; // ms - duration of the sound/element
+        this.intraCharGap = 0; // ms - gap *after* an element within a char
 
         // Timers
-        this.ditIntervalId = null;
-        this.dahIntervalId = null;
-        this.iambicTimeoutId = null;
+        this.repeatOrIambicTimerId = null; // Single timer for auto-repeat or iambic logic
 
         // Bind event listeners
         this._bindEvents();
         this.updateWpm(uiManager.getInitialWpm());
     }
 
-    /** Updates WPM and recalculates timing values. */
+    /** Updates WPM and recalculates timing values for sequence generation. */
     updateWpm(newWpm) {
         if (newWpm <= 0) return;
         this.wpm = newWpm;
-        const baseDit = 1200 / this.wpm;
-        this.ditDuration = baseDit; this.dahDuration = baseDit * 3;
-        this.intraCharGap = baseDit * MorseConfig.INTRA_CHAR_GAP_MULTIPLIER;
-        console.log(`InputHandler timings updated for ${newWpm} WPM: Dit=${this.ditDuration.toFixed(0)}ms, Dah=${this.dahDuration.toFixed(0)}ms, Gap=${this.intraCharGap.toFixed(0)}ms`);
-        this.audioPlayer.updateWpm(newWpm); this.decoder.updateWpm(newWpm);
+        const baseDit = 1200 / this.wpm; // Dit duration in milliseconds
+        this.ditDuration = baseDit;
+        this.dahDuration = baseDit * MorseConfig.DAH_DURATION_UNITS;
+        this.intraCharGap = baseDit * MorseConfig.INTRA_CHARACTER_GAP_UNITS;
+        console.log(`InputHandler sequence timings updated for ${newWpm} WPM: Dit=${this.ditDuration.toFixed(0)}ms, Dah=${this.dahDuration.toFixed(0)}ms, IntraGap=${this.intraCharGap.toFixed(0)}ms`);
+        this.audioPlayer.updateWpm(newWpm); // Keep audio player WPM in sync
+        this.decoder.updateWpm(newWpm); // Keep decoder WPM in sync
     }
 
     /** Central handler for press events (touch, mouse, key). */
     _press(type, method) {
-        // Determine context
         const isGameInputContext = (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX) &&
                                    (this.gameState.status === GameStatus.READY || this.gameState.isPlaying());
         const isResultsContext = this.gameState.status === GameStatus.SHOWING_RESULTS;
 
-        if (!isGameInputContext && !isResultsContext) return; // Ignore if not in valid context
+        if (!isGameInputContext && !isResultsContext) return;
 
         const now = performance.now();
         let statePossiblyChanged = false;
@@ -94,24 +96,24 @@ class InputHandler {
         if (statePossiblyChanged) {
             this.pressStartTime[pressStartTimeKey] = now;
             const isCurrentlyActive = (type === 'dit') ? (this.ditPressed || this.ditKeyPressed) : (this.dahPressed || this.dahKeyPressed);
-            this.uiManager.setButtonActive(type, isCurrentlyActive); // Update UI
+            this.uiManager.setButtonActive(type, isCurrentlyActive);
 
             if (isResultsContext) {
-                this._handleResultsInput(type); // Directly handle results input on press
+                // Use playInputTone for immediate feedback, allows cancellation
+                this.audioPlayer.playInputTone(type); // <<< FIXED FUNCTION CALL
+                if (this.callbacks.onResultsInput) this.callbacks.onResultsInput(type);
             } else if (isGameInputContext) {
-                 this.decoder.cancelScheduledDecode(); // Cancel game decode on new press
-                 this._processInputStateChange(); // Re-evaluate iambic/repeat for game
+                 this.decoder.cancelScheduledDecode();
+                 this._processInputStateChange();
             }
         }
     }
 
     /** Central handler for release events (touch, mouse, key). */
     _release(type, method) {
-        // Only process releases relevant to active modes
-        const isGameInputContext = (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX);
-        const isResultsContext = this.gameState.status === GameStatus.SHOWING_RESULTS;
+        const mightBeRelevantContext = (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX || this.gameState.status === GameStatus.SHOWING_RESULTS);
 
-        if (!isGameInputContext && !isResultsContext) return; // Ignore if not in valid context
+        if (!mightBeRelevantContext) return;
 
         let statePossiblyChanged = false;
 
@@ -124,15 +126,22 @@ class InputHandler {
         }
 
         if (statePossiblyChanged) {
-            // Check if *any* press method is still active for this button type
             const isStillActive = (type === 'dit') ? (this.ditPressed || this.ditKeyPressed) : (this.dahPressed || this.dahKeyPressed);
-            this.uiManager.setButtonActive(type, isStillActive); // Update UI based on remaining presses
 
-            // Only reprocess game input state if the release was for game paddles
-            if (isGameInputContext && (this.gameState.isPlaying() || this.gameState.status === GameStatus.READY)) {
-                 this._processInputStateChange(); // Re-evaluate iambic/repeat/decode for game
+            // Stop the specific input tone only if this type is fully released
+            if (!isStillActive) {
+                 // Check if the currently playing input tone matches the released type
+                 if (this.audioPlayer.inputToneNode && this.audioPlayer.inputToneNode.type === type) {
+                     this.audioPlayer.stopInputTone();
+                 }
             }
-            // No special action needed on release for results context
+
+            this.uiManager.setButtonActive(type, isStillActive);
+
+             const isGameInputContext = (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX) && (this.gameState.status === GameStatus.READY || this.gameState.isPlaying() || this.gameState.status === GameStatus.DECODING);
+             if (isGameInputContext) {
+                  this._processInputStateChange();
+             }
         }
     }
 
@@ -158,7 +167,9 @@ class InputHandler {
 
     _handleKeyDown(event) {
         const targetElement = event.target;
-        if (targetElement === this.playbackInput || targetElement === this.sandboxInput || targetElement.tagName === 'INPUT' || targetElement.tagName === 'TEXTAREA') { return; }
+        if (targetElement === this.playbackInput || targetElement === this.sandboxInput || targetElement.tagName === 'INPUT' || targetElement.tagName === 'TEXTAREA' || !this.settingsModal?.classList.contains('hidden')) {
+            return;
+        }
 
         const isGameContext = (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX) && (this.gameState.status === GameStatus.READY || this.gameState.isPlaying());
         const isResultsContext = this.gameState.status === GameStatus.SHOWING_RESULTS;
@@ -168,16 +179,18 @@ class InputHandler {
 
         if (event.key === '.' || event.key === 'e' || event.key === '0') { // Dit
             event.preventDefault();
-            if (!this.ditKeyPressed) this._press('dit', 'key'); // Let _press handle context
+            if (!this.ditKeyPressed) this._press('dit', 'key');
         } else if (event.key === '-' || event.key === 't' || event.key === 'T') { // Dah
             event.preventDefault();
-            if (!this.dahKeyPressed) this._press('dah', 'key'); // Let _press handle context
+            if (!this.dahKeyPressed) this._press('dah', 'key');
         }
     }
 
     _handleKeyUp(event) {
          const targetElement = event.target;
-         if (targetElement === this.playbackInput || targetElement === this.sandboxInput || targetElement.tagName === 'INPUT' || targetElement.tagName === 'TEXTAREA') { return; }
+         if (targetElement === this.playbackInput || targetElement === this.sandboxInput || targetElement.tagName === 'INPUT' || targetElement.tagName === 'TEXTAREA' || !this.settingsModal?.classList.contains('hidden')) {
+             return;
+         }
 
         if (event.key === '.' || event.key === 'e' || event.key === '0') { // Dit release
             event.preventDefault();
@@ -196,32 +209,35 @@ class InputHandler {
     }
 
      _handlePressEnd(event) {
-         const checkRelease = (button, type) => {
-             if (event.type === 'mouseup') {
-                 if (type === 'dit' && this.ditPressed) { this._release(type, 'mouse'); return true; }
-                 if (type === 'dah' && this.dahPressed) { this._release(type, 'mouse'); return true; }
-             } else if (event.type === 'touchend' || event.type === 'touchcancel') {
-                 for (let i = 0; i < event.changedTouches.length; i++) {
-                     const touch = event.changedTouches[i];
-                     const targetAtPoint = document.elementFromPoint(touch.clientX, touch.clientY);
-                     if (button === targetAtPoint || button.contains(targetAtPoint)) {
-                         if (type === 'dit' && this.ditPressed) { this._release(type, 'touch'); return true; }
-                         if (type === 'dah' && this.dahPressed) { this._release(type, 'touch'); return true; }
-                         break;
+         let releasedDit = false;
+         let releasedDah = false;
+
+         if (event.type === 'mouseup') {
+             if (this.ditPressed) { releasedDit = this._release('dit', 'mouse'); }
+             if (this.dahPressed) { releasedDah = this._release('dah', 'mouse'); }
+         } else if (event.type === 'touchend' || event.type === 'touchcancel') {
+             for (let i = 0; i < event.changedTouches.length; i++) {
+                 const touch = event.changedTouches[i];
+                 const targetAtEndPoint = document.elementFromPoint(touch.clientX, touch.clientY);
+
+                  if (this.ditPressed) {
+                     if (this.ditButton === targetAtEndPoint || this.ditButton.contains(targetAtEndPoint)) {
+                        releasedDit = this._release('dit', 'touch');
+                     } else if (!this.isTouchActiveOnElement(event.touches, this.ditButton)) {
+                         releasedDit = this._release('dit', 'touch');
+                     }
+                  }
+                 if (this.dahPressed) {
+                     if (this.dahButton === targetAtEndPoint || this.dahButton.contains(targetAtEndPoint)) {
+                        releasedDah = this._release('dah', 'touch');
+                     } else if (!this.isTouchActiveOnElement(event.touches, this.dahButton)) {
+                        releasedDah = this._release('dah', 'touch');
                      }
                  }
              }
-             return false;
-         };
-
-         let releasedDit = checkRelease(this.ditButton, 'dit');
-         let releasedDah = checkRelease(this.dahButton, 'dah');
-
-         // Fallback for touches ending off-element
-          if ((event.type === 'touchend' || event.type === 'touchcancel')) {
-              if (this.ditPressed && !releasedDit && !this.isTouchActiveOnElement(event.touches, this.ditButton)) this._release('dit', 'touch');
-              if (this.dahPressed && !releasedDah && !this.isTouchActiveOnElement(event.touches, this.dahButton)) this._release('dah', 'touch');
-          }
+             if (this.ditPressed && !releasedDit && !this.isTouchActiveOnElement(event.touches, this.ditButton)) this._release('dit', 'touch');
+             if (this.dahPressed && !releasedDah && !this.isTouchActiveOnElement(event.touches, this.dahButton)) this._release('dah', 'touch');
+         }
      }
 
      /** Helper to check if any active touches are over a specific element */
@@ -230,125 +246,138 @@ class InputHandler {
      }
 
 
-    /** Central logic to determine input mode (gameplay/sandbox only). */
+    /** Central logic to determine input mode (gameplay/sandbox only) and manage timers. */
     _processInputStateChange() {
-         if (!((this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX) && (this.gameState.status === GameStatus.READY || this.gameState.isPlaying()))) { this._clearAllTimers(); return; }
+         if (!((this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX) && (this.gameState.status === GameStatus.READY || this.gameState.isPlaying() || this.gameState.status === GameStatus.DECODING))) {
+            this._clearRepeatOrIambicTimer();
+            return;
+         }
 
         const isDitActive = this.ditPressed || this.ditKeyPressed;
         const isDahActive = this.dahPressed || this.dahKeyPressed;
 
-        this._clearAllTimers(); // Clear previous timers
+        this._clearRepeatOrIambicTimer();
 
-        if ((isDitActive || isDahActive) && (this.gameState.status === GameStatus.LISTENING || this.gameState.status === GameStatus.DECODING)) {
-            this.decoder.cancelScheduledDecode();
-            if (this.gameState.status === GameStatus.DECODING) { this.gameState.status = GameStatus.TYPING; }
-        }
+         if ((isDitActive || isDahActive) && this.gameState.status === GameStatus.DECODING) {
+             this.decoder.cancelScheduledDecode();
+             this.gameState.status = GameStatus.TYPING;
+         }
 
-        if (isDitActive && isDahActive) { // Iambic B
+        if (isDitActive && isDahActive) {
             this.gameState.isIambicHandling = true;
-            const lastPressTimeDit = this.pressStartTime.dit || 0; const lastPressTimeDah = this.pressStartTime.dah || 0;
+            const lastPressTimeDit = this.pressStartTime.dit || 0;
+            const lastPressTimeDah = this.pressStartTime.dah || 0;
             this.gameState.iambicState = (lastPressTimeDah > lastPressTimeDit) ? 'dah' : 'dit';
-            this._triggerIambicOutput();
-        } else if (isDitActive) { // Dit only
-            this.gameState.isIambicHandling = true; this.gameState.iambicState = 'dit';
-            this._startAutoRepeat('dit');
-        } else if (isDahActive) { // Dah only
-            this.gameState.isIambicHandling = true; this.gameState.iambicState = 'dah';
-            this._startAutoRepeat('dah');
+            this._triggerRepeatOrIambicOutput();
+        } else if (isDitActive) {
+            this.gameState.isIambicHandling = false;
+            this.gameState.iambicState = 'dit';
+            this._triggerRepeatOrIambicOutput();
+        } else if (isDahActive) {
+            this.gameState.isIambicHandling = false;
+            this.gameState.iambicState = 'dah';
+            this._triggerRepeatOrIambicOutput();
         } else { // No active input
-            this.gameState.isIambicHandling = false; this.gameState.iambicState = null;
-             if (this.gameState.currentInputSequence && (this.gameState.status === GameStatus.TYPING || this.gameState.status === GameStatus.DECODING)) {
+            this.gameState.isIambicHandling = false;
+            this.gameState.iambicState = null;
+             if (this.gameState.currentInputSequence && this.gameState.status === GameStatus.TYPING) {
                 this._scheduleDecodeAfterDelay();
+             } else if (this.gameState.status === GameStatus.TYPING && !this.gameState.currentInputSequence) {
+                 this.gameState.status = GameStatus.LISTENING;
              }
         }
     }
 
-    /** Starts automatic repetition (gameplay/sandbox only). */
-    _startAutoRepeat(type) {
-        const elementDuration = (type === 'dit' ? this.ditDuration : this.dahDuration);
-        const interval = elementDuration + this.intraCharGap;
-
-        const repeatAction = () => {
-            const isDitGameActive = this.ditPressed || this.ditKeyPressed; const isDahGameActive = this.dahPressed || this.dahKeyPressed;
-            if (((type === 'dit' && isDitGameActive && !isDahGameActive) || (type === 'dah' && isDahGameActive && !isDitGameActive)) && this.gameState.isPlaying()) {
-                this._emitInput(type, false); // Emit game element
-                const timerId = setTimeout(repeatAction, interval);
-                if (type === 'dit') { this.ditIntervalId = timerId; } else { this.dahIntervalId = timerId; }
-            } else { this._clearAllTimers(); this._processInputStateChange(); }
-        };
-
-        if (this.gameState.isPlaying() || this.gameState.status === GameStatus.READY) {
-             this._emitInput(type, false); // Emit first element
-             const firstTimerId = setTimeout(repeatAction, interval);
-             if (type === 'dit') { this.ditIntervalId = firstTimerId; } else { this.dahIntervalId = firstTimerId; }
-        } else { this._clearAllTimers(); }
-    }
-
-
-    /** Emits a single Dit or Dah input, routing based on context. */
-    _emitInput(type, isManualResultsCall = false) { // isManualResultsCall only used by _handleResultsInput
+    /** Emits a single Dit or Dah to the game state sequence AND triggers audio feedback. */
+    _emitInputToSequence(type) {
         const now = performance.now();
-        const isResultsContext = this.gameState.status === GameStatus.SHOWING_RESULTS || isManualResultsCall;
-
-        // Apply rate limiting only to game inputs
-        if (!isResultsContext) {
-             let minTimeSinceLastEmit = (type === 'dit') ? (this.ditDuration * 0.5) : (this.dahDuration * 0.5);
-             let lastEmitTime = (type === 'dit') ? this.lastDitEmitTime : this.lastDahEmitTime;
-             if (now - lastEmitTime < minTimeSinceLastEmit) return;
-        }
 
         if (type === 'dit') { this.lastDitEmitTime = now; } else { this.lastDahEmitTime = now; }
 
-        this.audioPlayer.playTone(type); // Play tone always
         const morseChar = (type === 'dit') ? '.' : '-';
 
-        if (isResultsContext) {
-            if (this.callbacks.onResultsInput) this.callbacks.onResultsInput(type);
-        } else { // Game/Sandbox Input
-            if (this.gameState.isPlaying() || this.gameState.status === GameStatus.READY) {
-                 this.gameState.addInput(morseChar);
-                 this.uiManager.updateUserPatternDisplay(this.gameState.currentInputSequence);
-                 if (this.callbacks.onInput) this.callbacks.onInput(morseChar);
-            }
+        if (this.gameState.isPlaying() || this.gameState.status === GameStatus.READY) {
+             this.gameState.addInput(morseChar);
+             this.uiManager.updateUserPatternDisplay(this.gameState.currentInputSequence);
+             this.audioPlayer.playInputTone(type); // *** Play the discrete tone *** <<< FIXED FUNCTION CALL
+             if (this.callbacks.onInput) this.callbacks.onInput(morseChar);
+             this.lastInputTypeGenerated = type;
         }
-        this.lastInputTypeGenerated = type;
     }
 
 
-    /** Triggers the next output in an Iambic sequence (gameplay only). */
-    _triggerIambicOutput() {
-        this._clearIambicTimeout();
-        const isDitGameActive = this.ditPressed || this.ditKeyPressed; const isDahGameActive = this.dahPressed || this.dahKeyPressed;
-        if (!this.gameState.isIambicHandling || !isDitGameActive || !isDahGameActive || !this.gameState.isPlaying()) { this._processInputStateChange(); return; }
-        const elementToSend = this.gameState.iambicState; if (!elementToSend) { console.error("Iambic state is null."); this._clearAllTimers(); this._processInputStateChange(); return; }
-        this._emitInput(elementToSend, false); // Emit game element
-        const nextElement = (elementToSend === 'dit') ? 'dah' : 'dit'; this.gameState.iambicState = nextElement;
-        const currentDuration = (elementToSend === 'dit' ? this.ditDuration : this.dahDuration); const delay = currentDuration + this.intraCharGap;
-        this.iambicTimeoutId = setTimeout(() => this._triggerIambicOutput(), delay);
+    /** Triggers the next output in an Auto-Repeat or Iambic sequence. */
+    _triggerRepeatOrIambicOutput() {
+        this._clearRepeatOrIambicTimer();
+
+        const isDitActive = this.ditPressed || this.ditKeyPressed;
+        const isDahActive = this.dahPressed || this.dahKeyPressed;
+
+        if (!(this.gameState.isPlaying() || this.gameState.status === GameStatus.READY)) return;
+
+        if (this.gameState.isIambicHandling && (!isDitActive || !isDahActive)) {
+             this._processInputStateChange();
+             return;
+        }
+        if (!this.gameState.isIambicHandling && this.gameState.iambicState === 'dit' && !isDitActive) {
+            this._processInputStateChange();
+            return;
+        }
+        if (!this.gameState.isIambicHandling && this.gameState.iambicState === 'dah' && !isDahActive) {
+            this._processInputStateChange();
+            return;
+        }
+
+        const elementToSend = this.gameState.iambicState;
+        if (!elementToSend) { console.error("Iambic/Repeat state is null."); return; }
+
+        this._emitInputToSequence(elementToSend);
+
+        const currentElementDuration = (elementToSend === 'dit' ? this.ditDuration : this.dahDuration);
+        const delay = currentElementDuration + this.intraCharGap;
+
+        if (this.gameState.isIambicHandling) {
+            this.gameState.iambicState = (elementToSend === 'dit') ? 'dah' : 'dit';
+        }
+
+        this.repeatOrIambicTimerId = setTimeout(() => this._triggerRepeatOrIambicOutput(), delay);
     }
 
 
     /** Schedules the character decode function (gameplay/sandbox only). */
      _scheduleDecodeAfterDelay() {
-         if (!this.gameState.currentInputSequence || this.gameState.status !== GameStatus.TYPING || !(this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX)) { this.gameState.isIambicHandling = false; this.gameState.iambicState = null; if (this.gameState.status === GameStatus.TYPING && !this.gameState.currentInputSequence) { this.gameState.status = GameStatus.LISTENING; } return; }
+         if (!this.gameState.currentInputSequence || this.gameState.status !== GameStatus.TYPING || !(this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX)) {
+            this.gameState.isIambicHandling = false;
+            this.gameState.iambicState = null;
+            if (this.gameState.status === GameStatus.TYPING && !this.gameState.currentInputSequence) {
+                this.gameState.status = GameStatus.LISTENING;
+            }
+            return;
+         }
+
          this.gameState.status = GameStatus.DECODING;
          this.decoder.scheduleDecode(() => {
-             if (this.gameState.status === GameStatus.DECODING && (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX)) { if (this.callbacks.onCharacterDecode) this.callbacks.onCharacterDecode(); }
-             else { if (this.gameState.status !== GameStatus.FINISHED && this.gameState.status !== GameStatus.SHOWING_RESULTS) { this.gameState.clearCurrentInput(); if (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX) { this.gameState.status = GameStatus.LISTENING; } } }
-             this.gameState.isIambicHandling = false; this.gameState.iambicState = null;
+             if (this.gameState.status === GameStatus.DECODING && (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX)) {
+                 if (this.callbacks.onCharacterDecode) {
+                     this.callbacks.onCharacterDecode();
+                 }
+             }
+             if (this.gameState.status !== GameStatus.FINISHED && this.gameState.status !== GameStatus.SHOWING_RESULTS) {
+                  if (this.gameState.status === GameStatus.DECODING) {
+                      this.gameState.clearCurrentInput();
+                      this.gameState.status = GameStatus.LISTENING;
+                  }
+             }
+             this.gameState.isIambicHandling = false;
+             this.gameState.iambicState = null;
          });
      }
 
-     /** Directly handles input on the results screen (called by _press). */
-    _handleResultsInput(type) {
-        if (this.gameState.status !== GameStatus.SHOWING_RESULTS) return;
-        console.log(`Results Input Detected: ${type}`);
-        // We emit here to get audio feedback, but the main action happens in main.js's callback
-        this._emitInput(type, true); // True signifies this is for results context
+    /** Clears the single iambic/repeat generation timer. */
+    _clearRepeatOrIambicTimer() {
+        if (this.repeatOrIambicTimerId) {
+            clearTimeout(this.repeatOrIambicTimerId);
+            this.repeatOrIambicTimerId = null;
+        }
     }
-
-    /** Clears all iambic/repeat generation timers. */
-    _clearAllTimers() { if (this.iambicTimeoutId) { clearTimeout(this.iambicTimeoutId); this.iambicTimeoutId = null; } if (this.ditIntervalId) { clearTimeout(this.ditIntervalId); this.ditIntervalId = null; } if (this.dahIntervalId) { clearTimeout(this.dahIntervalId); this.dahIntervalId = null; } }
-     /** Clears the specific iambic timeout. */
-     _clearIambicTimeout() { if (this.iambicTimeoutId) { clearTimeout(this.iambicTimeoutId); this.iambicTimeoutId = null; } }
 }

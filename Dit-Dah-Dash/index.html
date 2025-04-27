@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⌨️</text></svg>">
+    <link rel="stylesheet" href="css/modal.css"> <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⌨️</text></svg>">
 </head>
 <body>
     <div id="game-container">
@@ -40,12 +40,7 @@
                 </div>
                  <div id="user-pattern-container" class="pattern-container">
                     </div>
-                <div id="stats-display">
-                    <div id="timer-display">Time: 00:00.0</div>
-                    <div id="wpm-display">Net WPM: 0</div>
-                    <div id="accuracy-display">Accuracy: 100%</div>
-                    <div id="gross-wpm-display">Gross WPM: 0</div>
-                </div>
+               
             </div>
 
             <div id="playback-area" class="hidden">
@@ -74,52 +69,73 @@
                 <button id="show-settings-button">Settings ⚙️</button>
             </div>
 
-            <div id="settings-controls" class="hidden overlay settings-overlay">
-                 <button id="settings-back-button" class="menu-nav-button settings-back">← Back</button>
-                 <h2>Settings</h2>
-                 <label for="wpm-slider">WPM: <span id="wpm-value-display">20</span></label>
-                 <input type="range" id="wpm-slider" min="5" max="40" value="20">
-                 <label for="frequency-slider">Tone (Hz): <span id="frequency-value-display">600</span></label>
-                 <input type="range" id="frequency-slider" min="400" max="1000" value="600">
-                 <label for="sound-toggle">Sound:</label>
-                 <input type="checkbox" id="sound-toggle" checked>
-                 <label for="dark-mode-toggle">Dark Mode:</label>
-                 <input type="checkbox" id="dark-mode-toggle">
-                 <button id="reset-progress-button">Reset Progress</button>
-            </div>
-
             <div id="results-screen" class="hidden overlay">
                 <button id="results-menu-button" class="menu-nav-button" title="Main Menu">☰ Menu</button>
                 <h2>Sentence Complete!</h2>
-                <p>Use paddles below:</p>
-                <p>Dit (.) for Next, Dah (-) for Retry</p>
-                <p id="results-time"></p>
-                <p id="results-net-wpm"></p>
-                <p id="results-gross-wpm"></p>
-                <p id="results-accuracy"></p>
+                <div id="results-rating" class="star-rating">
+                    <span class="star" data-value="1">☆</span><span class="star" data-value="2">☆</span><span class="star" data-value="3">☆</span>
+                </div>
+                <div id="results-stats">
+                    <p id="results-time"></p>
+                    <p id="results-net-wpm"></p>
+                    <p id="results-gross-wpm"></p>
+                    <p id="results-accuracy"></p>
+                </div>
                 <p id="level-unlock-message"></p>
                 <div>
-                    <button id="level-select-button">Level Select</button>
-                </div>
+                    
+                    </div>
             </div>
 
             <div id="level-selection-screen" class="hidden overlay">
                 <button id="level-select-menu-button" class="menu-nav-button" title="Main Menu">☰ Menu</button>
-                 <h2>Select Level</h2>
+                 <h2></h2>
                 <div id="level-list"></div>
             </div>
 
-        </div> <div id="input-area" class="hidden">
-            <button id="dit-button" class="morse-button">
-                <svg viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg"><circle cx="25" cy="25" r="15" /></svg>
-                <span class="paddle-label"></span> </button>
-            <button id="dah-button" class="morse-button">
-                <svg viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="20" width="30" height="10" rx="3"/></svg>
-                 <span class="paddle-label"></span> </button>
         </div>
 
-    </div> <script src="js/config.js"></script>
-    <script src="js/audioPlayer.js"></script>
+        <div id="input-area" class="hidden">
+            <button id="dit-button" class="morse-button">
+                <svg class="paddle-svg" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg"><circle cx="25" cy="25" r="15" /></svg>
+                <span class="paddle-label"></span>
+            </button>
+            <button id="dah-button" class="morse-button">
+                <svg class="paddle-svg" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="20" width="30" height="10" rx="3"/></svg>
+                 <span class="paddle-label"></span>
+            </button>
+        </div>
+
+        <div id="settings-modal" class="modal hidden">
+            <div class="modal-header" id="settings-modal-header">
+                <span class="modal-title">Settings</span>
+                <button class="modal-close-button" id="settings-close-button">&times;</button>
+            </div>
+            <div class="modal-content">
+                 <label for="wpm-slider">WPM: <span id="wpm-value-display">20</span></label>
+                 <input type="range" id="wpm-slider" min="5" max="40" value="20">
+
+                 <label for="frequency-slider">Tone (Hz): <span id="frequency-value-display">600</span></label>
+                 <input type="range" id="frequency-slider" min="400" max="1000" value="600">
+
+                 <div class="settings-toggle-row">
+                     <label for="sound-toggle">Sound:</label>
+                     <input type="checkbox" id="sound-toggle" checked>
+                 </div>
+
+                 <div class="settings-toggle-row">
+                     <label for="dark-mode-toggle">Dark Mode:</label>
+                     <input type="checkbox" id="dark-mode-toggle">
+                 </div>
+
+                 <button id="reset-progress-button">Reset Progress</button>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/modal.js"></script> <script src="js/audioPlayer.js"></script>
     <script src="js/gameState.js"></script>
     <script src="js/scoreCalculator.js"></script>
     <script src="js/levelManager.js"></script>

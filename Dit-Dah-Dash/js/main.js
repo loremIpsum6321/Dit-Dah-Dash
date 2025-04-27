@@ -8,6 +8,7 @@
  * Manages the game update timer for live stats.
  * Correct feedback is now visual only (no sound).
  * Handles correct input feedback trigger.
+ * Connects InputHandler and AudioPlayer for tone end callbacks.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -28,7 +29,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Initialization ---
     function initializeApp() {
         initializeSettingsModal(); // Initialize modal first
-        initializeInputHandler();
+        initializeInputHandler(); // Init InputHandler
+        initializeAudioPlayerCallbacks(); // Connect AudioPlayer and InputHandler
         applyInitialSettings();
         setupEventListeners();
         showMainMenu(); // Show main menu initially
@@ -69,6 +71,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         );
         console.log("InputHandler initialized.");
+    }
+
+    /** Sets up the callback from AudioPlayer to InputHandler */
+    function initializeAudioPlayerCallbacks() {
+        if (audioPlayer && inputHandler && inputHandler.handleToneEnd) {
+            audioPlayer.setOnToneEndCallback(inputHandler.handleToneEnd.bind(inputHandler));
+            console.log("AudioPlayer onToneEndCallback connected to InputHandler.");
+        } else {
+            console.error("Failed to connect AudioPlayer callback - instances not ready?");
+        }
     }
 
     function setupEventListeners() {
@@ -229,7 +241,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Input Handling Callbacks (from InputHandler) ---
     function handleInputHandlerInput(inputChar) {
-        // Called whenever a dit (.) or dah (-) is added to the sequence
+        // Called whenever a dit (.) or dah (-) is added to the sequence *successfully* (not queued)
         // Start the game timer on the very first input if ready
         if (gameState.status === GameStatus.READY && (gameState.currentMode === AppMode.GAME || gameState.currentMode === AppMode.SANDBOX)) {
             if (gameState.startTimer()) { // startTimer sets status to LISTENING
@@ -323,9 +335,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Update final stats display before showing results overlay
         uiManager.updateTimer(gameState.elapsedTime); // Show final time
-        uiManager.updateWpmDisplay(scores.netWpm);
-        uiManager.updateAccuracyDisplay(scores.accuracy);
-        uiManager.updateGrossWpmDisplay(scores.grossWpm);
+        // uiManager.updateWpmDisplay(scores.netWpm); // Stats are shown on results overlay now
+        // uiManager.updateAccuracyDisplay(scores.accuracy);
+        // uiManager.updateGrossWpmDisplay(scores.grossWpm);
 
 
         let unlockedNextLevelId = null;
@@ -380,12 +392,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (gameState.isPlaying()) {
                 const elapsed = gameState.getCurrentElapsedTime();
                 uiManager.updateTimer(elapsed);
-                // Calculate and update live stats (WPM, Acc)
-                // Use calculateScores which now handles live calculation correctly
-                const liveStats = scoreCalculator.calculateLiveStats(gameState);
-                uiManager.updateWpmDisplay(liveStats.netWpm);
-                uiManager.updateAccuracyDisplay(liveStats.accuracy);
-                uiManager.updateGrossWpmDisplay(liveStats.grossWpm);
+                // // Calculate and update live stats (WPM, Acc) - Disabled for now to reduce calculation load
+                // // Use calculateScores which now handles live calculation correctly
+                // const liveStats = scoreCalculator.calculateLiveStats(gameState);
+                // uiManager.updateWpmDisplay(liveStats.netWpm);
+                // uiManager.updateAccuracyDisplay(liveStats.accuracy);
+                // uiManager.updateGrossWpmDisplay(liveStats.grossWpm);
             } else {
                  // If no longer playing but timer is running, stop it
                  // (Should be stopped by handleSentenceFinished, but as a safeguard)
@@ -438,6 +450,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const currentWpm = uiManager.getInitialWpm(); // Gets from UIManager's state
         const currentFreq = uiManager.getInitialFrequency();
         if (!inputHandler) initializeInputHandler(); // Should already be initialized
+        if (!audioPlayer.onToneEndCallback) initializeAudioPlayerCallbacks(); // Ensure callback is set
         applyWpmSetting(currentWpm);
         applyFrequencySetting(currentFreq);
         // Sound/Dark/Hint are applied via UIManager or AudioPlayer directly

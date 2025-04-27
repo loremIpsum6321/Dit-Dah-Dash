@@ -1,3 +1,4 @@
+/* In file: js/audioPlayer.js */
 /**
  * js/audioPlayer.js
  * -----------------
@@ -5,6 +6,8 @@
  * Allows adjustment of WPM and tone frequency. Plays discrete tones based on timing.
  * Includes fixes for feedback sounds and paddle input cancellation.
  * Correct sound is now disabled.
+ * Added callback for when input tones finish playing.
+ * Ensures onended callback is reliably called after tone completes naturally.
  */
 
 class AudioPlayer {
@@ -33,9 +36,19 @@ class AudioPlayer {
         this.inputToneNode = null; // Stores { osc, gain, type: 'dit'|'dah' } for the *currently playing* input paddle tone
         this.playbackCompletionTimeoutId = null;
         this.isCurrentlyPlayingBack = false;
+        this.onToneEndCallback = null; // Callback when an input tone finishes
 
         this._calculateTimings(); // Initial calculation based on default WPM
     }
+
+    /**
+     * Sets a callback function to be executed when an input tone finishes playing naturally.
+     * @param {function | null} callback - The function to call, or null to clear.
+     */
+    setOnToneEndCallback(callback) {
+        this.onToneEndCallback = callback;
+    }
+
 
     /**
      * Calculates Morse element durations based on the current WPM.
@@ -121,15 +134,19 @@ class AudioPlayer {
     }
 
     /**
-     * Plays a single Morse tone (dit or dah) immediately, cancelling any ongoing input tone.
-     * Used for direct input feedback in the game/sandbox.
+     * Plays a single Morse tone (dit or dah) immediately.
+     * This assumes any previous tone was handled or stopped appropriately by the caller.
      * @param {'dit' | 'dah'} type - The type of tone to play.
      */
     playInputTone(type) {
         if (!this.isSoundEnabled || !this.initializeAudioContext()) return;
 
-        // *** Cancel existing input tone immediately ***
-        this.stopInputTone();
+        // If a tone is somehow still marked as playing, stop it forcefully first.
+        // This shouldn't happen often with the new InputHandler logic but acts as a safeguard.
+        if (this.inputToneNode) {
+            console.warn(`playInputTone called while inputToneNode was not null. Stopping previous tone (${this.inputToneNode.type}) first.`);
+            this.stopInputTone(); // Force stop the previous one
+        }
 
         const duration = type === 'dah' ? this.dahDurationSec : this.ditDurationSec;
         if (duration <= 0) {
@@ -138,48 +155,68 @@ class AudioPlayer {
         }
 
         const startTime = this.audioContext.currentTime;
-        this.inputToneNode = this._scheduleTone(startTime, duration, this.toneFrequency, false, type); // Pass type to track
+        const toneNodes = this._scheduleTone(startTime, duration, this.toneFrequency, false, type);
+        if (!toneNodes) return; // Scheduling failed
 
-        // Auto-clear reference when done
-        if (this.inputToneNode && this.inputToneNode.osc) {
-            const currentNodeRef = this.inputToneNode; // Capture ref for closure
-            this.inputToneNode.osc.onended = () => {
-                // Only clear if it's still the *same* node reference (prevent race conditions)
-                if (this.inputToneNode === currentNodeRef) {
-                    this.inputToneNode = null;
+        this.inputToneNode = toneNodes; // Store reference { osc, gain, type }
+
+        // Setup the onended handler for natural completion
+        const currentNodeRef = this.inputToneNode; // Capture ref for closure
+        // console.log(`Attaching onended for ${type} (${currentNodeRef.osc.__resource_id__ || 'no_id'})`); // Debugging ID if available
+
+        currentNodeRef.osc.onended = () => {
+            // console.log(`onended fired for ${currentNodeRef.type} (${currentNodeRef.osc.__resource_id__ || 'no_id'})`); // Debugging ID
+            // Only process if this is still the currently active node
+            if (this.inputToneNode === currentNodeRef) {
+                // console.log(`Clearing inputToneNode and calling callback for ${currentNodeRef.type}`); // Debug
+                this.inputToneNode = null; // Clear the reference *first*
+                if (this.onToneEndCallback) {
+                    this.onToneEndCallback(); // Notify handler that audio is free
                 }
-                // Ensure cleanup even if node changed
-                 try { currentNodeRef.osc?.disconnect(); currentNodeRef.gain?.disconnect(); } catch(e){}
-            };
-        }
+            } else {
+                // console.log(`onended fired for ${currentNodeRef.type}, but inputToneNode changed. Ignoring.`); // Debug
+            }
+            // Basic cleanup (disconnect nodes)
+            try { currentNodeRef.osc?.disconnect(); currentNodeRef.gain?.disconnect(); } catch(e){}
+        };
     }
+
 
     /**
      * Stops the currently playing input tone immediately.
      */
     stopInputTone() {
         if (this.inputToneNode && this.audioContext) {
-            // console.log(`Stopping input tone: ${this.inputToneNode.type}`); // Debug
+            const nodeToStop = this.inputToneNode; // Capture ref before clearing
+            this.inputToneNode = null; // Clear reference *immediately*
+
+            // console.log(`Stopping input tone manually: ${nodeToStop.type} (${nodeToStop.osc.__resource_id__ || 'no_id'})`); // Debugging ID
+
             const now = this.audioContext.currentTime;
-            const { osc, gain } = this.inputToneNode;
+            const { osc, gain } = nodeToStop;
+
             try {
+                // Remove the natural 'onended' handler since this is a forced stop
+                if (osc) osc.onended = null;
+
+                // Cancel future changes and ramp down gain
                 if (gain?.gain) {
                     gain.gain.cancelScheduledValues(now);
-                    // Use setValueAtTime for immediate silence, then ramp down
-                    gain.gain.setValueAtTime(gain.gain.value, now);
-                    gain.gain.linearRampToValueAtTime(0, now + this.rampTime);
+                    gain.gain.setValueAtTime(gain.gain.value, now); // Hold current gain value
+                    gain.gain.linearRampToValueAtTime(0, now + this.rampTime); // Ramp down smoothly
                 }
+                // Stop the oscillator shortly after the ramp down completes
                 if (osc) {
-                    osc.stop(now + this.rampTime + 0.01); // Stop after ramp
-                     // Ensure cleanup happens even if stopped early
-                     osc.onended = () => { try { osc.disconnect(); gain?.disconnect(); } catch(e){} };
+                    osc.stop(now + this.rampTime + 0.01); // Stop slightly after ramp
+                    // Ensure disconnect happens *after* stop time
+                    setTimeout(() => { try { osc.disconnect(); gain?.disconnect(); } catch(e){} }, this.rampTime * 1000 + 20);
                 }
             } catch (e) {
                 console.warn("Error stopping input audio node:", e);
+                // Fallback disconnect
                 try { osc?.disconnect(); gain?.disconnect(); } catch(e2){}
-            } finally {
-                 this.inputToneNode = null; // Clear reference immediately
             }
+             // Do NOT trigger the onToneEndCallback here, this is manual stop.
         }
     }
 
@@ -210,23 +247,30 @@ class AudioPlayer {
 
             gain.gain.setValueAtTime(0, startTime);
             gain.gain.linearRampToValueAtTime(1, startTime + this.rampTime);
-            gain.gain.setValueAtTime(1, startTime + duration - this.rampTime);
+            if (duration > this.rampTime * 2) {
+                 gain.gain.setValueAtTime(1, startTime + duration - this.rampTime);
+            } else {
+                 gain.gain.setValueAtTime(1, startTime + this.rampTime);
+            }
             gain.gain.linearRampToValueAtTime(0, startTime + duration);
 
             osc.start(startTime);
-            osc.stop(startTime + duration + this.rampTime * 2); // Stop slightly after ramp
+            const stopTime = startTime + duration + this.rampTime; // Ensure stop happens after ramp
+            osc.stop(stopTime);
 
-             const nodeRef = { osc, gain, type }; // Include type
+             const nodeRef = { osc, gain, type };
+
+             // Default onended cleanup - will be overridden by playInputTone if needed
+             osc.onended = () => {
+                 if (isSequencePlayback) {
+                    this.playbackNodes = this.playbackNodes.filter(n => n !== nodeRef);
+                 }
+                 try { osc.disconnect(); gain.disconnect(); } catch(e){}
+             };
+
              if (isSequencePlayback) {
                 this.playbackNodes.push(nodeRef);
-                osc.onended = () => {
-                    this.playbackNodes = this.playbackNodes.filter(n => n !== nodeRef);
-                    try { osc.disconnect(); gain.disconnect(); } catch(e){}
-                };
-             } else if (!type) { // Only auto-cleanup if it's NOT a tracked input tone
-                osc.onended = () => { try { osc.disconnect(); gain.disconnect(); } catch(e){} };
              }
-             // Note: onended for input tones is handled in playInputTone
 
              return nodeRef;
         } catch (error) {
@@ -253,40 +297,36 @@ class AudioPlayer {
         if (window.morseGameState) window.morseGameState.status = GameStatus.PLAYING_BACK;
 
         let scheduledTime = this.audioContext.currentTime;
-        const elements = morseString.split(/(\s+|\/|\|)/);
+        const elements = morseString.split(/(\s+|\/|\|)/); // Split including delimiters
 
         elements.forEach(element => {
-            if (!element) return;
+            if (!element) return; // Skip empty strings from split
             element = element.trim();
             let currentDuration = 0;
-            let gapDuration = this.intraCharGapSec;
+            let gapDuration = 0; // Use 0 gap by default unless specified
 
             if (element === '.') {
                 currentDuration = this.ditDurationSec;
                 this._scheduleTone(scheduledTime, currentDuration, this.toneFrequency, true);
+                gapDuration = this.intraCharGapSec; // Gap AFTER dit
             } else if (element === '-') {
                 currentDuration = this.dahDurationSec;
                 this._scheduleTone(scheduledTime, currentDuration, this.toneFrequency, true);
+                gapDuration = this.intraCharGapSec; // Gap AFTER dah
             } else if (element === '/') {
-                currentDuration = 0;
                 gapDuration = this.interCharGapSec - this.intraCharGapSec;
-            } else if (element === '|') {
                 currentDuration = 0;
+            } else if (element === '|') {
                 gapDuration = this.wordGapSec - this.intraCharGapSec;
-            } else if (element === ' ') {
                  currentDuration = 0;
-                 gapDuration = this.intraCharGapSec;
-            } else {
-                 return; // Skip unknown elements
-            }
+             }
+             // Ignore ' ' (space) delimiters
 
-             scheduledTime += currentDuration;
-             // Add gap *after* the element (if element had duration) or use specific gap duration
-             scheduledTime += gapDuration;
-
+             scheduledTime += currentDuration + gapDuration;
         });
 
         const totalDurationMs = (scheduledTime - this.audioContext.currentTime) * 1000;
+
         this.playbackCompletionTimeoutId = setTimeout(() => {
             this.isCurrentlyPlayingBack = false;
             this.playbackNodes = [];
@@ -296,7 +336,7 @@ class AudioPlayer {
                  window.morseGameState.status = GameStatus.PLAYBACK_INPUT;
              }
             if (onComplete) onComplete();
-        }, totalDurationMs + 150); // Add a small buffer
+        }, Math.max(0, totalDurationMs) + 150); // Add buffer
     }
 
     /**
@@ -312,20 +352,21 @@ class AudioPlayer {
         if (this.playbackNodes.length > 0 && this.audioContext) {
             console.log(`Stopping playback. ${this.playbackNodes.length} nodes active.`);
             const now = this.audioContext.currentTime;
-            this.playbackNodes.forEach(({ osc, gain }) => {
+            [...this.playbackNodes].forEach(({ osc, gain }) => {
                 try {
                     if (gain?.gain) {
                         gain.gain.cancelScheduledValues(now);
-                        gain.gain.setValueAtTime(gain.gain.value, now); // Hold current gain
-                        gain.gain.linearRampToValueAtTime(0, now + this.rampTime); // Ramp down
+                        gain.gain.setValueAtTime(gain.gain.value, now);
+                        gain.gain.linearRampToValueAtTime(0, now + this.rampTime);
                     }
                     if (osc) {
-                        osc.stop(now + this.rampTime + 0.01); // Stop after ramp
-                        osc.onended = () => { try { osc.disconnect(); gain?.disconnect(); } catch(e){} }; // Cleanup
+                        osc.onended = null;
+                        osc.stop(now + this.rampTime + 0.01);
+                         setTimeout(() => { try { osc.disconnect(); gain?.disconnect(); } catch(e){} }, this.rampTime * 1000 + 20);
                     }
                 } catch (e) {
                     console.warn("Error stopping audio node during playback cancellation:", e);
-                    try { osc?.disconnect(); gain?.disconnect(); } catch(e2){} // Ensure disconnect
+                    try { osc?.disconnect(); gain?.disconnect(); } catch(e2){}
                 }
             });
             this.playbackNodes = [];
@@ -333,7 +374,6 @@ class AudioPlayer {
 
          if (this.isCurrentlyPlayingBack) {
              this.isCurrentlyPlayingBack = false;
-             // Restore state if playback was interrupted
              if (window.morseGameState && window.morseGameState.status === GameStatus.PLAYING_BACK) {
                   window.morseGameState.status = GameStatus.PLAYBACK_INPUT;
               }
@@ -347,7 +387,7 @@ class AudioPlayer {
     stopFeedbackSounds() {
          if (this.feedbackNodes.length > 0 && this.audioContext) {
              const now = this.audioContext.currentTime;
-             this.feedbackNodes.forEach(({ osc, gain }) => {
+             [...this.feedbackNodes].forEach(({ osc, gain }) => {
                  try {
                      if (gain?.gain) {
                         gain.gain.cancelScheduledValues(now);
@@ -355,8 +395,9 @@ class AudioPlayer {
                         gain.gain.linearRampToValueAtTime(0, now + this.rampTime);
                      }
                      if (osc) {
+                         osc.onended = null;
                          osc.stop(now + this.rampTime + 0.01);
-                         osc.onended = () => { try { osc.disconnect(); gain?.disconnect(); } catch(e){} };
+                          setTimeout(() => { try { osc.disconnect(); gain?.disconnect(); } catch(e){} }, this.rampTime * 1000 + 20);
                      }
                  } catch (e) {
                      console.warn("Error stopping feedback audio node:", e);
@@ -369,20 +410,15 @@ class AudioPlayer {
 
     /** Plays a short, higher-pitched sound for correct feedback. (DEACTIVATED) */
     playCorrectSound() {
-        // --- Deactivated ---
-        // console.log("playCorrectSound called but is deactivated.");
-        // Original code: this._playFeedbackSound(this.toneFrequency * 1.5, 0.05);
         return; // Do nothing
     }
 
     /** Plays a slightly longer, lower-pitched sound for incorrect feedback. */
     playIncorrectSound() {
-        // Check if an input tone or playback is currently active
         if (this.inputToneNode || this.isCurrentlyPlayingBack) {
-            console.warn("Cannot play incorrect sound while another sound is active.");
-            return;
+            // console.warn("Cannot play incorrect sound while another sound is active.");
+            return; // Silently ignore if other sounds playing
         }
-
         this._playFeedbackSound(this.toneFrequency * 0.7, 0.1);
     }
 
@@ -394,20 +430,18 @@ class AudioPlayer {
      */
     _playFeedbackSound(frequency, durationSeconds) {
         if (!this.isSoundEnabled || !this.initializeAudioContext() || !this.masterGainNode || frequency <= 0) {
-            if (frequency <= 0) console.warn("Attempted to play feedback sound with frequency <= 0 Hz.");
             return;
         }
-
-        this.stopFeedbackSounds(); // Stop any existing feedback sounds first
+        this.stopFeedbackSounds(); // Stop existing feedback first
 
         try {
             const now = this.audioContext.currentTime;
             const osc = this.audioContext.createOscillator();
             const gain = this.audioContext.createGain();
-            osc.type = 'triangle'; // Use triangle for a slightly different timbre
+            osc.type = 'triangle';
             osc.frequency.setValueAtTime(frequency, now);
 
-            const feedbackGainLevel = 0.5; // Adjust volume if needed
+            const feedbackGainLevel = 0.5;
             gain.gain.setValueAtTime(0, now);
             gain.gain.linearRampToValueAtTime(feedbackGainLevel, now + this.rampTime);
             gain.gain.setValueAtTime(feedbackGainLevel, now + durationSeconds - this.rampTime);
@@ -417,14 +451,14 @@ class AudioPlayer {
             gain.connect(this.masterGainNode);
 
             osc.start(now);
-            osc.stop(now + durationSeconds + this.rampTime + 0.01); // Stop slightly after ramp
+            osc.stop(now + durationSeconds + this.rampTime + 0.01);
 
             const nodeRef = { osc, gain };
             this.feedbackNodes.push(nodeRef);
 
             osc.onended = () => {
                 this.feedbackNodes = this.feedbackNodes.filter(n => n !== nodeRef);
-                try { osc.disconnect(); gain.disconnect(); } catch(e){} // Cleanup
+                try { osc.disconnect(); gain.disconnect(); } catch(e){}
             };
         } catch (error) {
             console.error("Error playing feedback sound:", error);

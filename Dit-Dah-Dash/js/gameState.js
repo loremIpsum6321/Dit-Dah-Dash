@@ -1,8 +1,10 @@
+/* In file: js/gameState.js */
 /**
  * js/gameState.js
  * ---------------
  * Manages the state of the application, including game progress, playback state,
  * timing, current input, and mode (Game, Sandbox, Playback, Menu, Settings).
+ * Includes logging for input sequence updates.
  */
 
 // Defines the possible states of the application (focusing on activity)
@@ -171,10 +173,12 @@ class GameState {
             this.status = GameStatus.TYPING; // Immediately switch to TYPING on first input
             this.currentInputSequence += input;
             this.clearCharacterTimeout(); // Clear any nascent timeout
+            console.log(`GameState: Added input '${input}'. Sequence: '${this.currentInputSequence}'. Status: ${this.status}`); // Log
         } else if (this.status === GameStatus.LISTENING || this.status === GameStatus.TYPING || this.status === GameStatus.DECODING) {
-            if (this.status === GameStatus.LISTENING) this.status = GameStatus.TYPING; // Ensure TYPING state
+            if (this.status === GameStatus.LISTENING || this.status === GameStatus.DECODING) this.status = GameStatus.TYPING; // Ensure TYPING state
             this.currentInputSequence += input;
             this.clearCharacterTimeout(); // Reset timeout on each input while typing
+            console.log(`GameState: Added input '${input}'. Sequence: '${this.currentInputSequence}'. Status: ${this.status}`); // Log
         } else if (this.status === GameStatus.SHOWING_RESULTS) {
              // Input on results screen is now ignored (removed '..' shortcut)
              this.resultsInputSequence = ""; // Keep clear
@@ -183,6 +187,7 @@ class GameState {
 
     /** Clears the current game/sandbox input sequence. */
     clearCurrentInput() {
+        // console.log(`Clearing input sequence. Was: '${this.currentInputSequence}'`); // Debug
         this.currentInputSequence = "";
         this.inputTimestamps = [];
         this.clearCharacterTimeout();
@@ -192,6 +197,7 @@ class GameState {
         }
         // Reset to listening state only if actively playing game/sandbox characters
         if (this.isPlaying()) {
+            // console.log("Setting status to LISTENING after clearing input."); // Debug
             this.status = GameStatus.LISTENING;
         }
     }
@@ -219,11 +225,8 @@ class GameState {
             console.log("Sentence finished!");
             return false; // No more characters
         } else {
-            console.log(`Moved to character index: ${this.currentCharIndex} ('${this.getTargetCharacter()}')`);
-            // Set state back to LISTENING explicitly after moving
-            if (this.status !== GameStatus.FINISHED && this.status !== GameStatus.SHOWING_RESULTS) {
-                this.status = GameStatus.LISTENING;
-            }
+            // console.log(`Moved to character index: ${this.currentCharIndex} ('${this.getTargetCharacter()}')`); // Debug
+            // clearCurrentInput should have set state to LISTENING if appropriate
             return true; // More characters remain
         }
     }
@@ -271,11 +274,9 @@ class GameState {
     getCurrentElapsedTime() {
         if (this.startTime === 0) return 0;
         if (this.status === GameStatus.FINISHED || this.status === GameStatus.SHOWING_RESULTS) {
-             // Handle case where stopTimer() was called but endTime wasn't set (e.g., manual finish)
              if (this.status === GameStatus.FINISHED && this.endTime === 0) return performance.now() - this.startTime;
             return this.elapsedTime;
         }
-        // READY, LISTENING, TYPING, DECODING all count as active timing
         if (this.status === GameStatus.READY || this.isPlaying()) return performance.now() - this.startTime;
 
         return 0; // Return 0 if not actively timing

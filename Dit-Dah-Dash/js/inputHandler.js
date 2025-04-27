@@ -1,3 +1,4 @@
+/* In file: js/inputHandler.js */
 /**
  * js/inputHandler.js
  * ------------------
@@ -8,6 +9,9 @@
  * Ensures correct visual feedback for keyboard input.
  * Fixes call to audioPlayer for input tones.
  * Adds timing check to prevent duplicate iambic inputs.
+ * Implements a single-input queue to handle rapid inputs during audio playback.
+ * Refined queue processing via onToneEnd callback for better responsiveness.
+ * Ensures decode check happens after processing queued input.
  */
 
 class InputHandler {
@@ -45,6 +49,7 @@ class InputHandler {
         this.pressStartTime = { dit: 0, dah: 0 };
         this.lastInputTypeGenerated = null; // 'dit' or 'dah'
         this.lastEmitTime = 0; // Timestamp of the *start* of the last emitted element (sound)
+        this.queuedInput = null; // Single input queue ('dit' or 'dah')
 
         // Timing (derived from WPM) - Used for sequence generation timing
         this.wpm = MorseConfig.DEFAULT_WPM;
@@ -79,6 +84,25 @@ class InputHandler {
                                    (this.gameState.status === GameStatus.READY || this.gameState.isPlaying());
         const isResultsContext = this.gameState.status === GameStatus.SHOWING_RESULTS;
 
+        // --- Queueing Check (Game Context Only) ---
+        if (isGameInputContext && this.audioPlayer.inputToneNode) {
+            if (this.queuedInput === null) {
+                this.queuedInput = type;
+                // console.log(`Audio busy on press, queued: ${type}`); // Debug
+                const wasDitActive = this.ditPressed || this.ditKeyPressed;
+                const wasDahActive = this.dahPressed || this.dahKeyPressed;
+                 if (type === 'dit' && !wasDitActive) this.uiManager.setButtonActive('dit', true);
+                 if (type === 'dah' && !wasDahActive) this.uiManager.setButtonActive('dah', true);
+                 if (type === 'dit') { if (method === 'key') this.ditKeyPressed = true; else this.ditPressed = true; }
+                 else { if (method === 'key') this.dahKeyPressed = true; else this.dahPressed = true; }
+                return;
+            } else {
+                 // console.log(`Audio busy on press, queue full. Ignored: ${type}`); // Debug
+                 return;
+            }
+        }
+
+        // --- Standard Press Processing ---
         if (!isGameInputContext && !isResultsContext) return;
 
         const now = performance.now();
@@ -99,7 +123,6 @@ class InputHandler {
             this.uiManager.setButtonActive(type, isCurrentlyActive);
 
             if (isResultsContext) {
-                // Use playInputTone for immediate feedback, allows cancellation
                 this.audioPlayer.playInputTone(type);
                 if (this.callbacks.onResultsInput) this.callbacks.onResultsInput(type);
             } else if (isGameInputContext) {
@@ -127,18 +150,16 @@ class InputHandler {
 
         if (statePossiblyChanged) {
             const isStillActive = (type === 'dit') ? (this.ditPressed || this.ditKeyPressed) : (this.dahPressed || this.dahKeyPressed);
-
-            // Stop the specific input tone only if this type is fully released
-            if (!isStillActive) {
-                 // Check if the currently playing input tone matches the released type
-                 if (this.audioPlayer.inputToneNode && this.audioPlayer.inputToneNode.type === type) {
-                     this.audioPlayer.stopInputTone();
-                 }
-            }
-
             this.uiManager.setButtonActive(type, isStillActive);
 
              const isGameInputContext = (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX) && (this.gameState.status === GameStatus.READY || this.gameState.isPlaying() || this.gameState.status === GameStatus.DECODING);
+
+             // Process queue *first* if applicable
+             if (isGameInputContext && this.queuedInput !== null && !this.audioPlayer.inputToneNode) {
+                 this.handleToneEnd(); // Manually trigger queue processing
+             }
+
+             // Then process the state change due to the release itself
              if (isGameInputContext) {
                   this._processInputStateChange();
              }
@@ -174,17 +195,18 @@ class InputHandler {
         const isGameContext = (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX) && (this.gameState.status === GameStatus.READY || this.gameState.isPlaying());
         const isResultsContext = this.gameState.status === GameStatus.SHOWING_RESULTS;
 
-        if (!isGameContext && !isResultsContext) return;
-        if (event.repeat) return; // Ignore keyboard auto-repeat
-
-        if (event.key === '.' || event.key === 'e' || event.key === '0') { // Dit
-            event.preventDefault();
-            if (!this.ditKeyPressed) this._press('dit', 'key');
-        } else if (event.key === '-' || event.key === 't' || event.key === 'T') { // Dah
-            event.preventDefault();
-            if (!this.dahKeyPressed) this._press('dah', 'key');
+        if ((isGameContext || isResultsContext) && (event.key === '.' || event.key === 'e' || event.key === '0' || event.key === '-' || event.key === 't' || event.key === 'T')) {
+            if (!event.repeat) {
+                event.preventDefault();
+                if (event.key === '.' || event.key === 'e' || event.key === '0') { // Dit
+                    if (!this.ditKeyPressed) this._press('dit', 'key');
+                } else if (event.key === '-' || event.key === 't' || event.key === 'T') { // Dah
+                    if (!this.dahKeyPressed) this._press('dah', 'key');
+                }
+            }
         }
     }
+
 
     _handleKeyUp(event) {
          const targetElement = event.target;
@@ -193,12 +215,12 @@ class InputHandler {
          }
 
         if (event.key === '.' || event.key === 'e' || event.key === '0') { // Dit release
-            event.preventDefault();
-            if (this.ditKeyPressed) this._release('dit', 'key');
+             event.preventDefault();
+             if (this.ditKeyPressed) this._release('dit', 'key');
          }
         else if (event.key === '-' || event.key === 't' || event.key === 'T') { // Dah release
-            event.preventDefault();
-            if (this.dahKeyPressed) this._release('dah', 'key');
+             event.preventDefault();
+             if (this.dahKeyPressed) this._release('dah', 'key');
          }
     }
 
@@ -209,40 +231,31 @@ class InputHandler {
     }
 
      _handlePressEnd(event) {
-         // Handle release correctly for both mouse and touch, considering multiple touches
-         let releasedDit = false;
-         let releasedDah = false;
+         let releasedType = null;
 
          if (event.type === 'mouseup') {
-             // Mouse release is simpler, assume release if button was pressed
-             if (this.ditPressed) { releasedDit = this._release('dit', 'mouse'); }
-             if (this.dahPressed) { releasedDah = this._release('dah', 'mouse'); }
+             if (this.ditPressed) { releasedType = 'dit'; this._release('dit', 'mouse'); }
+             if (this.dahPressed) { releasedType = 'dah'; this._release('dah', 'mouse'); }
          } else if (event.type === 'touchend' || event.type === 'touchcancel') {
-              // Check changed touches to see which specific touches ended
              for (let i = 0; i < event.changedTouches.length; i++) {
                  const touch = event.changedTouches[i];
                  const targetAtTouchEnd = document.elementFromPoint(touch.clientX, touch.clientY);
 
-                 // Check if the touch ending corresponds to one of our buttons
                  if (this.ditPressed && (this.ditButton === targetAtTouchEnd || this.ditButton.contains(targetAtTouchEnd))) {
-                     // If this touch ending was over the dit button, try to release dit
-                     if (!this.isTouchActiveOnElement(event.touches, this.ditButton)) { // Ensure no *other* touches are still on dit
-                         releasedDit = this._release('dit', 'touch');
+                     if (!this.isTouchActiveOnElement(event.touches, this.ditButton)) {
+                         releasedType = 'dit'; this._release('dit', 'touch');
                      }
                  }
                  if (this.dahPressed && (this.dahButton === targetAtTouchEnd || this.dahButton.contains(targetAtTouchEnd))) {
-                    // If this touch ending was over the dah button, try to release dah
-                     if (!this.isTouchActiveOnElement(event.touches, this.dahButton)) { // Ensure no *other* touches are still on dah
-                        releasedDah = this._release('dah', 'touch');
+                     if (!this.isTouchActiveOnElement(event.touches, this.dahButton)) {
+                        releasedType = 'dah'; this._release('dah', 'touch');
                      }
                  }
              }
-             // Fallback: If a button was pressed but no specific touch end matched it,
-             // release it if there are *no remaining active touches* on it.
-             if (this.ditPressed && !releasedDit && !this.isTouchActiveOnElement(event.touches, this.ditButton)) {
+             if (this.ditPressed && releasedType !== 'dit' && !this.isTouchActiveOnElement(event.touches, this.ditButton)) {
                  this._release('dit', 'touch');
              }
-             if (this.dahPressed && !releasedDah && !this.isTouchActiveOnElement(event.touches, this.dahButton)) {
+             if (this.dahPressed && releasedType !== 'dah' && !this.isTouchActiveOnElement(event.touches, this.dahButton)) {
                  this._release('dah', 'touch');
              }
          }
@@ -254,186 +267,229 @@ class InputHandler {
             const touch = touchList[i];
             const targetAtPoint = document.elementFromPoint(touch.clientX, touch.clientY);
             if (element === targetAtPoint || element.contains(targetAtPoint)) {
-                return true; // Found an active touch on the element
+                return true;
             }
         }
-        return false; // No active touches found on the element
+        return false;
      }
 
 
     /** Central logic to determine input mode (gameplay/sandbox only) and manage timers. */
     _processInputStateChange() {
-         if (!((this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX) && (this.gameState.status === GameStatus.READY || this.gameState.isPlaying() || this.gameState.status === GameStatus.DECODING))) {
+         const isGameInputContext = (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX) &&
+                                    (this.gameState.status === GameStatus.READY || this.gameState.isPlaying() || this.gameState.status === GameStatus.DECODING);
+
+         if (!isGameInputContext) {
             this._clearRepeatOrIambicTimer();
-            this.lastEmitTime = 0; // Reset last emit time when not in active game context
+            this.lastEmitTime = 0;
+            this.queuedInput = null;
             return;
          }
 
         const isDitActive = this.ditPressed || this.ditKeyPressed;
         const isDahActive = this.dahPressed || this.dahKeyPressed;
 
-        this._clearRepeatOrIambicTimer(); // Stop any pending repeat/iambic action
+        this._clearRepeatOrIambicTimer();
 
-         // If input happens during decoding, cancel decode and go back to typing
          if ((isDitActive || isDahActive) && this.gameState.status === GameStatus.DECODING) {
              this.decoder.cancelScheduledDecode();
              this.gameState.status = GameStatus.TYPING;
          }
 
         if (isDitActive && isDahActive) {
-            // Iambic Mode
             this.gameState.isIambicHandling = true;
             const lastPressTimeDit = this.pressStartTime.dit || 0;
             const lastPressTimeDah = this.pressStartTime.dah || 0;
-            // Set the *next* element to be sent based on which was pressed last
-            this.gameState.iambicState = (lastPressTimeDah > lastPressTimeDit) ? 'dah' : 'dit';
-            // Immediately trigger the first output if timing allows
+            if (this.gameState.iambicState === null) {
+                this.gameState.iambicState = (lastPressTimeDah > lastPressTimeDit) ? 'dah' : 'dit';
+            }
             this._triggerRepeatOrIambicOutput();
         } else if (isDitActive) {
-            // Dit Only Mode (Repeat)
             this.gameState.isIambicHandling = false;
             this.gameState.iambicState = 'dit';
             this._triggerRepeatOrIambicOutput();
         } else if (isDahActive) {
-            // Dah Only Mode (Repeat)
             this.gameState.isIambicHandling = false;
             this.gameState.iambicState = 'dah';
             this._triggerRepeatOrIambicOutput();
         } else { // No active input
             this.gameState.isIambicHandling = false;
             this.gameState.iambicState = null;
-             // If input sequence exists and we were typing, schedule decode
              if (this.gameState.currentInputSequence && this.gameState.status === GameStatus.TYPING) {
-                this._scheduleDecodeAfterDelay();
+                // Only schedule decode if no queue and no audio playing - let handleToneEnd do it otherwise
+                if (this.queuedInput === null && !this.audioPlayer.inputToneNode) {
+                    this._scheduleDecodeAfterDelay();
+                }
              } else if (this.gameState.status === GameStatus.TYPING && !this.gameState.currentInputSequence) {
-                 // If typing but sequence is empty (e.g., after incorrect clear), go back to listening
                  this.gameState.status = GameStatus.LISTENING;
              }
-             // No timer needed if no keys are pressed
         }
     }
 
-    /** Emits a single Dit or Dah to the game state sequence AND triggers audio feedback. */
+    /**
+     * Updates game state/UI for a single Dit or Dah element. Does NOT play audio.
+     * @param {'dit' | 'dah'} type - The type of input to process.
+     * @returns {string} The corresponding morse character ('.' or '-').
+     */
     _emitInputToSequence(type) {
         const now = performance.now();
         const morseChar = (type === 'dit') ? '.' : '-';
 
-        if (this.gameState.isPlaying() || this.gameState.status === GameStatus.READY) {
-             this.gameState.addInput(morseChar); // Adds to sequence and updates state
-             this.uiManager.updateUserPatternDisplay(this.gameState.currentInputSequence);
-             this.audioPlayer.playInputTone(type); // Play the discrete tone
-             if (this.callbacks.onInput) this.callbacks.onInput(morseChar);
-             this.lastInputTypeGenerated = type;
-             this.lastEmitTime = now; // Record the time this element *started*
+        if (!(this.gameState.isPlaying() || this.gameState.status === GameStatus.READY)) {
+            console.warn("_emitInputToSequence called in wrong state:", this.gameState.status);
+            return morseChar;
         }
+
+        this.gameState.addInput(morseChar);
+        this.uiManager.updateUserPatternDisplay(this.gameState.currentInputSequence);
+        if (this.callbacks.onInput) this.callbacks.onInput(morseChar);
+        this.lastInputTypeGenerated = type;
+        this.lastEmitTime = now;
+
+        return morseChar;
     }
 
 
     /** Triggers the next output in an Auto-Repeat or Iambic sequence, checking timing. */
     _triggerRepeatOrIambicOutput() {
-        this._clearRepeatOrIambicTimer(); // Clear previous timer before deciding next action
+        this._clearRepeatOrIambicTimer();
 
         const isDitActive = this.ditPressed || this.ditKeyPressed;
         const isDahActive = this.dahPressed || this.dahKeyPressed;
-        const elementToSend = this.gameState.iambicState; // Which element *should* be sent next
+        const elementToSend = this.gameState.iambicState;
 
-        // --- Sanity Checks & State Validation ---
         if (!(this.gameState.isPlaying() || this.gameState.status === GameStatus.READY)) {
-            this.lastEmitTime = 0; return; // Not in a state to send input
+             this.lastEmitTime = 0; return;
         }
-        if (!elementToSend) {
-             console.error("Iambic/Repeat state is null when trying to trigger output.");
-             this.lastEmitTime = 0;
-             this._processInputStateChange(); // Re-evaluate state
-             return;
-        }
+        if (!elementToSend) { return; }
 
-        // --- Check if the correct keys are still pressed for the current mode ---
-        if (this.gameState.isIambicHandling && (!isDitActive || !isDahActive)) {
-             // Switched from iambic to single key press, re-evaluate
-             this._processInputStateChange();
-             return;
-        }
-        if (!this.gameState.isIambicHandling && elementToSend === 'dit' && !isDitActive) {
-            // Dit was released, stop repeating/re-evaluate
-            this._processInputStateChange();
-            return;
-        }
-        if (!this.gameState.isIambicHandling && elementToSend === 'dah' && !isDahActive) {
-            // Dah was released, stop repeating/re-evaluate
-            this._processInputStateChange();
-            return;
-        }
+        // --- Key Press Check ---
+        if (this.gameState.isIambicHandling && (!isDitActive || !isDahActive)) { this._processInputStateChange(); return; }
+        if (!this.gameState.isIambicHandling && elementToSend === 'dit' && !isDitActive) { this._processInputStateChange(); return; }
+        if (!this.gameState.isIambicHandling && elementToSend === 'dah' && !isDahActive) { this._processInputStateChange(); return; }
 
-        // --- Timing Check (Prevent Duplicate Inputs) ---
+        // --- Timing Check ---
         const now = performance.now();
         const timeSinceLastEmit = now - this.lastEmitTime;
-        const lastElementDuration = (this.lastInputTypeGenerated === 'dit' ? this.ditDuration : this.dahDuration);
-        const requiredTime = lastElementDuration + this.intraCharGap; // Time needed after last emit START
+        const lastElementDuration = (this.lastInputTypeGenerated === 'dit' ? this.ditDuration : (this.lastInputTypeGenerated === 'dah' ? this.dahDuration : 0));
+        const requiredTime = lastElementDuration + this.intraCharGap;
 
-        // If not enough time has passed since the START of the last emitted element, wait.
         if (this.lastEmitTime > 0 && timeSinceLastEmit < requiredTime) {
-            // Not enough time passed, schedule the check again after the remaining time
             const remainingTime = requiredTime - timeSinceLastEmit;
-            this.repeatOrIambicTimerId = setTimeout(() => this._triggerRepeatOrIambicOutput(), Math.max(10, remainingTime)); // Min 10ms delay
-            // console.log(`Timing check failed: ${timeSinceLastEmit.toFixed(0)} < ${requiredTime.toFixed(0)}. Rescheduling in ${remainingTime.toFixed(0)}ms`); // Debug
+            this.repeatOrIambicTimerId = setTimeout(() => this._triggerRepeatOrIambicOutput(), Math.max(5, remainingTime));
             return;
         }
-        // console.log(`Timing check passed: ${timeSinceLastEmit.toFixed(0)} >= ${requiredTime.toFixed(0)}`); // Debug
 
-        // --- Emit the Element ---
-        this._emitInputToSequence(elementToSend); // Emits sound and updates game state/UI
+        // --- Check Audio Busy State and Emit/Queue ---
+        if (this.audioPlayer.inputToneNode) {
+             if (this.queuedInput === null) {
+                 this.queuedInput = elementToSend;
+                 // console.log(`Audio busy, queued: ${elementToSend}`); // Debug
+             } else {
+                 // console.log(`Audio busy, queue full. Dropped: ${elementToSend}`); // Debug
+             }
+         } else {
+             // --- Audio is free - Process immediately ---
+             this._emitInputToSequence(elementToSend);
+             this.audioPlayer.playInputTone(elementToSend);
 
-        // --- Prepare for Next Element (Iambic/Repeat) ---
-        const currentElementDuration = (elementToSend === 'dit' ? this.ditDuration : this.dahDuration);
-        const delayForNext = currentElementDuration + this.intraCharGap; // Delay until the *next* element can START
+             // --- Schedule Next Trigger ---
+             const currentElementDuration = (elementToSend === 'dit' ? this.ditDuration : this.dahDuration);
+             const delayForNext = currentElementDuration + this.intraCharGap;
 
-        // If in iambic mode, flip the state for the *next* potential element
-        if (this.gameState.isIambicHandling) {
-            this.gameState.iambicState = (elementToSend === 'dit') ? 'dah' : 'dit';
-        }
-        // If not iambic, iambicState remains the same (e.g., 'dit' for dit-repeat)
+             if (this.gameState.isIambicHandling) {
+                 this.gameState.iambicState = (elementToSend === 'dit') ? 'dah' : 'dit';
+             }
 
-        // Schedule the next call to this function after the calculated delay
-        this.repeatOrIambicTimerId = setTimeout(() => this._triggerRepeatOrIambicOutput(), delayForNext);
+             const stillDitActive = this.ditPressed || this.ditKeyPressed;
+             const stillDahActive = this.dahPressed || this.dahKeyPressed;
+             const shouldContinue = (this.gameState.isIambicHandling && stillDitActive && stillDahActive) ||
+                                     (!this.gameState.isIambicHandling && elementToSend === 'dit' && stillDitActive) ||
+                                     (!this.gameState.isIambicHandling && elementToSend === 'dah' && stillDahActive);
+
+             if (shouldContinue) {
+                this.repeatOrIambicTimerId = setTimeout(() => this._triggerRepeatOrIambicOutput(), Math.max(5, delayForNext));
+             } else {
+                 this._processInputStateChange();
+             }
+         }
     }
 
+    /**
+     * Callback function triggered by AudioPlayer when an input tone finishes playing.
+     * Processes any queued input, schedules decode check, and potentially restarts the repeat/iambic sequence.
+     */
+    handleToneEnd() {
+         let processedQueueItem = false;
+         if (this.queuedInput !== null) {
+             const typeToProcess = this.queuedInput;
+             this.queuedInput = null;
+             // console.log(`Processing queued input: ${typeToProcess}`); // Debug
+
+             this._emitInputToSequence(typeToProcess);
+             this.audioPlayer.playInputTone(typeToProcess);
+             processedQueueItem = true;
+
+             // **Set state to TYPING and Schedule decode check**
+             if (this.gameState.status !== GameStatus.FINISHED && this.gameState.status !== GameStatus.SHOWING_RESULTS) {
+                this.gameState.status = GameStatus.TYPING;
+                this._scheduleDecodeAfterDelay();
+             }
+         }
+
+         // Use setTimeout to check for held keys and potentially continue sequence.
+         setTimeout(() => {
+             const isDitActive = this.ditPressed || this.ditKeyPressed;
+             const isDahActive = this.dahPressed || this.dahKeyPressed;
+
+             if (isDitActive || isDahActive) {
+                  this._processInputStateChange();
+             } else if (!processedQueueItem && this.gameState.status === GameStatus.TYPING && this.gameState.currentInputSequence) {
+                 // If no queue was processed AND no keys active, but we were typing, ensure decode check is scheduled.
+                 // This handles the case where a single non-queued element finishes playing and keys are released.
+                 this._scheduleDecodeAfterDelay();
+             } else if (!isDitActive && !isDahActive) {
+                 // If no keys active and nothing else to do, ensure state is consistent.
+                 this._processInputStateChange();
+             }
+         }, 1); // Minimal delay
+     }
 
 
     /** Schedules the character decode function (gameplay/sandbox only). */
      _scheduleDecodeAfterDelay() {
-         // Only schedule if there's input and we are in typing state
-         if (!this.gameState.currentInputSequence || this.gameState.status !== GameStatus.TYPING || !(this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX)) {
-            // Reset state if necessary
-            this.gameState.isIambicHandling = false;
-            this.gameState.iambicState = null;
-            if (this.gameState.status === GameStatus.TYPING && !this.gameState.currentInputSequence) {
-                this.gameState.status = GameStatus.LISTENING; // Go back to listening if sequence is empty
-            }
-            return;
+        this.decoder.cancelScheduledDecode(); // Cancel any existing timer first
+
+         const canSchedule = (this.gameState.currentInputSequence &&
+                             (this.gameState.status === GameStatus.TYPING || this.gameState.status === GameStatus.LISTENING) &&
+                             (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX));
+
+         if (!canSchedule) {
+             // console.log(`Decode scheduling skipped. Status: ${this.gameState.status}, Sequence: '${this.gameState.currentInputSequence}'`); // Debug
+             if (this.gameState.status === GameStatus.TYPING && !this.gameState.currentInputSequence) {
+                  this.gameState.status = GameStatus.LISTENING;
+             }
+             return;
          }
 
-         // Set status to decoding *before* scheduling timeout
+         // console.log(`Scheduling decode for sequence: '${this.gameState.currentInputSequence}'`); // Debug
          this.gameState.status = GameStatus.DECODING;
          this.decoder.scheduleDecode(() => {
-             // This callback runs *after* the timeout defined in decoder.scheduleDecode
-
-             // Only decode if we are *still* in the DECODING state and in the right mode
-             if (this.gameState.status === GameStatus.DECODING && (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX)) {
+             if (this.gameState.status === GameStatus.DECODING &&
+                 (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX))
+             {
                  if (this.callbacks.onCharacterDecode) {
-                     this.callbacks.onCharacterDecode(); // Trigger the main decode logic
+                     this.callbacks.onCharacterDecode();
+                 } else {
+                      console.error("onCharacterDecode callback is missing!");
+                      if(this.gameState.status === GameStatus.DECODING) this.gameState.status = GameStatus.LISTENING;
                  }
+             } else {
+                 // console.log(`Decode callback skipped. Status: ${this.gameState.status}, Mode: ${this.gameState.currentMode}`); // Debug
+                 if(this.gameState.status === GameStatus.DECODING) this.gameState.status = GameStatus.LISTENING;
              }
-             // After decode attempt (whether successful or not), reset iambic state.
-             // The main decode logic in main.js should set the status back to LISTENING or handle FINISHED state.
              this.gameState.isIambicHandling = false;
              this.gameState.iambicState = null;
-             // Check if state is stuck in decoding (e.g., decode logic failed), reset to listening as fallback
-             if (this.gameState.status === GameStatus.DECODING && this.gameState.currentMode !== AppMode.MENU) {
-                 console.warn("State was DECODING after decode callback finished, resetting to LISTENING.");
-                 this.gameState.clearCurrentInput(); // Ensure input is cleared too
-                 this.gameState.status = GameStatus.LISTENING;
-             }
          });
      }
 

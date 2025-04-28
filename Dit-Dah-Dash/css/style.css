@@ -6,6 +6,7 @@
  * and styling for results paddles and star ratings.
  * Updates pattern container width, text display size, and fixed cursor behavior.
  * Further increases pattern container/SVG size.
+ * Adds correct-pattern styling.
  */
 
 /* --- Global Styles & Resets --- */
@@ -329,10 +330,11 @@ html, body {
 .pattern-container svg.pattern-dah {
     width: 42px; /* Larger size (maintain ratio) */
 }
-.pattern-container.correct-pattern { background-color: var(--pattern-correct-bg); }
-.pattern-container.correct-pattern svg { fill: var(--pattern-correct-fill); }
-.pattern-container.incorrect-pattern { background-color: var(--pattern-incorrect-bg); }
-.pattern-container.incorrect-pattern svg { fill: var(--pattern-incorrect-fill); }
+/* Apply feedback colors only to user input container */
+#user-pattern-container.correct-pattern { background-color: var(--pattern-correct-bg); }
+#user-pattern-container.correct-pattern svg { fill: var(--pattern-correct-fill); }
+#user-pattern-container.incorrect-pattern { background-color: var(--pattern-incorrect-bg); }
+#user-pattern-container.incorrect-pattern svg { fill: var(--pattern-incorrect-fill); }
 
 /* Hint Visibility Styles */
 .hint-toggle { position: absolute; top: 50%; right: 5px; transform: translateY(-50%); background: none; border: none; padding: 0 3px; cursor: pointer; color: var(--hint-toggle-color); line-height: 0; transition: color 0.2s ease; z-index: 5; }
@@ -341,7 +343,7 @@ html, body {
 #target-pattern-outer-wrapper > .hint-toggle > svg { display: none; }
 #target-pattern-outer-wrapper:not(.hint-hidden) > .hint-toggle > svg.icon-visible { display: inline-block; }
 #target-pattern-outer-wrapper.hint-hidden > .hint-toggle > svg.icon-hidden { display: inline-block; }
-#target-pattern-outer-wrapper.hint-hidden .pattern-container svg { visibility: hidden; }
+#target-pattern-outer-wrapper.hint-hidden #target-pattern-container svg { visibility: hidden; } /* Target only hint container */
 
 /* --- Stats Display (Game Mode / Results) --- */
 #stats-display {
@@ -464,7 +466,7 @@ html, body {
     #game-ui-wrapper.results-active #stats-display { margin-bottom: 10px; }
     .star-rating { font-size: 2em; margin-bottom: 10px;}
     #results-stats p { font-size: 1em; margin-bottom: 3px;}
-    #results-screen .results-instructions { font-size: 0.9em; } 
+    #results-screen .results-instructions { font-size: 0.9em; }
 }
 
 /* Very Small Screens (e.g., small phones) */

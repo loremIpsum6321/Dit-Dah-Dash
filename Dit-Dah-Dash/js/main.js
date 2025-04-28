@@ -73,7 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
             { // Callbacks object
                 onInput: handleInputHandlerInput,
                 onCharacterDecode: handleCharacterDecode,
-                onResultsInput: handleResultsInput
+                onResultsInput: handleResultsInput // This callback handles the logic for results screen
             }
         );
         console.log("InputHandler initialized and AudioPlayer callback connected.");
@@ -323,7 +323,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (decodedChar && targetChar && decodedChar === targetChar) {
             // --- CORRECT ---
             uiManager.updateCharacterState(gameState.currentCharIndex, 'completed');
-            uiManager.setPatternDisplayState('correct'); // Visual feedback
+            uiManager.setPatternDisplayState('correct'); // Visual feedback for pattern input
 
             const moreChars = gameState.moveToNextCharacter(); // Advances index, handles spaces, clears input state, sets status to LISTENING or FINISHED
 
@@ -343,9 +343,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             // --- INCORRECT --- (or undecodable sequence)
             gameState.registerIncorrectAttempt();
-            uiManager.updateCharacterState(gameState.currentCharIndex, 'incorrect'); // Visual feedback (flash red)
+            uiManager.updateCharacterState(gameState.currentCharIndex, 'incorrect'); // Visual feedback (flash red) for char
             audioPlayer.playIncorrectSound();
-            uiManager.setPatternDisplayState('incorrect'); // Visual feedback
+            uiManager.setPatternDisplayState('incorrect'); // Visual feedback for pattern input
 
             gameState.status = GameStatus.LISTENING; // Go back to listening for the *same* character
 
@@ -408,11 +408,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Results Screen Input Handling ---
     function handleResultsInput(type) {
         // Called by InputHandler when a paddle is pressed ONLY in SHOWING_RESULTS state
+        // The InputHandler now prevents rapid re-triggering while held.
         if (gameState.status !== GameStatus.SHOWING_RESULTS) return;
 
-        // Dit maps to the 'Next' action (if available)
-        if (type === 'dit') {
-            console.log("Results: Dit pressed - Attempting Next");
+        // SWAPPED: Dah = Next, Dit = Retry
+        if (type === 'dah') { // DAH = Next
+            console.log("Results: Dah pressed - Attempting Next");
             if (gameState.currentMode === AppMode.GAME) {
                  const next = levelManager.getNextSentence(gameState);
                  // Check if 'next' exists and is unlocked
@@ -425,10 +426,8 @@ document.addEventListener('DOMContentLoaded', () => {
              } else { // Sandbox mode has no 'Next' level concept
                  console.log("Results: Next ignored (Sandbox).");
              }
-        }
-        // Dah maps to the 'Retry' action
-        else if (type === 'dah') {
-            console.log("Results: Dah pressed - Attempting Retry");
+        } else if (type === 'dit') { // DIT = Retry
+            console.log("Results: Dit pressed - Attempting Retry");
             retryLevel(); // Function to retry the current sentence/level
         }
     }

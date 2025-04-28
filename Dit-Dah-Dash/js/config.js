@@ -336,7 +336,7 @@ const KEYBIND_DISPLAY_MAP = { // Not currently used
     'Control': 'Ctrl', 'Alt': 'Alt', 'Meta': 'Cmd/Win',
     'ArrowUp': '↑', 'ArrowDown': '↓', 'ArrowLeft': '←', 'ArrowRight': '→',
 };
-const HINT_DEFAULT_VISIBLE = false; // Hint is hidden by default
+const HINT_DEFAULT_VISIBLE = true; // Hint is visible by default for new users
 
 // --- Make config globally accessible ---
 // Grouping related constants for clarity

@@ -13,6 +13,7 @@
  * Refined queue processing via onToneEnd callback for better responsiveness.
  * Ensures decode check happens after processing queued input.
  * Improves mobile touch handling to prevent hangs.
+ * Adds flag to prevent re-triggering results actions while paddle held.
  */
 
 class InputHandler {
@@ -51,6 +52,7 @@ class InputHandler {
         this.lastInputTypeGenerated = null; // 'dit' or 'dah'
         this.lastEmitTime = 0; // Timestamp of the *start* of the last emitted element (sound)
         this.queuedInput = null; // Single input queue ('dit' or 'dah')
+        this.resultsActionTriggered = false; // Flag to prevent re-triggering results actions
 
         // Track active touch identifiers to prevent multi-touch issues
         this.activeTouchIds = { dit: null, dah: null };
@@ -142,9 +144,12 @@ class InputHandler {
             this.uiManager.setButtonActive(type, isCurrentlyActive); // Update visual state
 
             if (isResultsContext) {
-                // Results mode: Play sound immediately, trigger callback
-                this.audioPlayer.playInputTone(type);
-                if (this.callbacks.onResultsInput) this.callbacks.onResultsInput(type);
+                // Results mode: Play sound immediately, trigger callback ONCE per press cycle
+                if (!this.resultsActionTriggered) {
+                     this.audioPlayer.playInputTone(type);
+                     if (this.callbacks.onResultsInput) this.callbacks.onResultsInput(type);
+                     this.resultsActionTriggered = true; // Set flag to prevent re-trigger while held
+                }
             } else if (isGameInputContext) {
                  // Game mode: Cancel any pending decode, process state change (starts iambic/repeat logic)
                  this.decoder.cancelScheduledDecode();
@@ -176,6 +181,11 @@ class InputHandler {
             const isStillActive = (type === 'dit') ? (this.ditPressed || this.ditKeyPressed) : (this.dahPressed || this.dahKeyPressed);
             this.uiManager.setButtonActive(type, isStillActive);
 
+             // Reset the results action flag only when *neither* paddle is active
+             if (!this.ditPressed && !this.ditKeyPressed && !this.dahPressed && !this.dahKeyPressed) {
+                 this.resultsActionTriggered = false;
+             }
+
              const isGameInputContext = (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX) && (this.gameState.status === GameStatus.READY || this.gameState.isPlaying() || this.gameState.status === GameStatus.DECODING);
 
              // Process queue *first* if applicable (audio finished while key was held/released)
@@ -189,7 +199,7 @@ class InputHandler {
              if (isGameInputContext) {
                   this._processInputStateChange();
              }
-             // If in results context, releasing a button does nothing extra.
+             // If in results context, releasing a button doesn't trigger further action, but resets the flag above.
         }
     }
 
@@ -236,17 +246,17 @@ class InputHandler {
         const isGameContext = (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX) && (this.gameState.status === GameStatus.READY || this.gameState.isPlaying());
         const isResultsContext = this.gameState.status === GameStatus.SHOWING_RESULTS;
 
-        if ((isGameContext || isResultsContext) && (event.key === '.' || event.key === 'e' || event.key === '0' || event.key === '-' || event.key === 't' || event.key === 'T')) {
+        if ((isGameContext || isResultsContext) && (event.key === '.' || event.key === 'e' || event.key === '0' || event.key === '-' || event.key === 'K' || event.key === 'k' || event.key === 'J' || event.key === 'j')) {
             // Prevent default browser actions for these keys in relevant contexts
             event.preventDefault();
 
             // Process press only if it's not a repeat event
             if (!event.repeat) {
-                if (event.key === '.' || event.key === 'e' || event.key === '0') { // Dit
+                if (event.key === '.' || event.key === 'j' || event.key === 'J' || event.key === '0') { // Dit
                     if (!this.ditKeyPressed) { // Check internal flag first
                          this._press('dit', 'key');
                     }
-                } else if (event.key === '-' || event.key === 't' || event.key === 'T') { // Dah
+                } else if (event.key === '-' || event.key === 'k' || event.key === 'K') { // Dah
                     if (!this.dahKeyPressed) { // Check internal flag first
                          this._press('dah', 'key');
                     }
@@ -263,13 +273,13 @@ class InputHandler {
          }
 
         // Process release if the key matches and was previously pressed
-        if (event.key === '.' || event.key === 'e' || event.key === '0') { // Dit release
+        if (event.key === '.' || event.key === 'j' || event.key === 'J' || event.key === '0') { // Dit release
              event.preventDefault();
              if (this.ditKeyPressed) { // Check internal flag
                  this._release('dit', 'key');
              }
          }
-        else if (event.key === '-' || event.key === 't' || event.key === 'T') { // Dah release
+        else if (event.key === '-' || event.key === 'k' || event.key === 'K') { // Dah release
              event.preventDefault();
              if (this.dahKeyPressed) { // Check internal flag
                  this._release('dah', 'key');

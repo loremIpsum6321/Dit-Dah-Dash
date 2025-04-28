@@ -283,7 +283,9 @@ class UIManager {
      * @param {'default' | 'correct' | 'incorrect'} state - The state to apply.
      */
     setPatternDisplayState(state) {
-        if (!this.targetPatternContainer || !this.userPatternContainer) return;
+        // Only target the user input container for feedback colors
+        const container = this.userPatternContainer;
+        if (!container) return;
 
         // Clear any existing timeouts for the type of feedback we *aren't* setting
         if (state !== 'correct' && this._correctPatternTimeout) {
@@ -295,24 +297,23 @@ class UIManager {
             this._incorrectPatternTimeout = null;
         }
 
-        const containers = [this.targetPatternContainer, this.userPatternContainer];
         // Remove previous feedback states explicitly before adding new one
-        containers.forEach(c => c.classList.remove('correct-pattern', 'incorrect-pattern'));
+        container.classList.remove('correct-pattern', 'incorrect-pattern');
 
         if (state === 'correct') {
             // Apply the correct state class
-            containers.forEach(c => c.classList.add('correct-pattern'));
+            container.classList.add('correct-pattern');
             // Set a timeout to remove the correct class
             this._correctPatternTimeout = setTimeout(() => {
-                containers.forEach(c => c.classList.remove('correct-pattern'));
+                container.classList.remove('correct-pattern');
                 this._correctPatternTimeout = null;
             }, MorseConfig.INCORRECT_FLASH_DURATION); // Use same duration for simplicity
         } else if (state === 'incorrect') {
             // Apply the incorrect state class
-            containers.forEach(c => c.classList.add('incorrect-pattern'));
+            container.classList.add('incorrect-pattern');
             // Set a timeout to remove the incorrect class
             this._incorrectPatternTimeout = setTimeout(() => {
-                containers.forEach(c => c.classList.remove('incorrect-pattern'));
+                container.classList.remove('incorrect-pattern');
                 this._incorrectPatternTimeout = null;
             }, MorseConfig.INCORRECT_FLASH_DURATION);
         }
@@ -413,6 +414,7 @@ class UIManager {
                     this._incorrectFlashTimeout = null;
                 }, MorseConfig.INCORRECT_FLASH_DURATION);
             } else if (this._incorrectFlashTimeout && charSpan.classList.contains('incorrect')) {
+                // If state changes *from* incorrect (e.g., user types correct immediately after), clear timeout
                 clearTimeout(this._incorrectFlashTimeout);
                 this._incorrectFlashTimeout = null;
             }
@@ -506,11 +508,12 @@ class UIManager {
         if (!buttons[0] || !buttons[1] || !labels[0] || !labels[1] || !svgs[0] || !svgs[1]) return;
 
         if (mode === 'results') {
-            labels[0].textContent = "Next"; // Dit = Next
-            labels[1].textContent = "Retry"; // Dah = Retry
+            // Swap: DAH = Next, DIT = Retry
+            labels[0].textContent = "Retry"; // Dit = Retry
+            labels[1].textContent = "Next"; // Dah = Next
             const isNextDisabled = (gameMode === AppMode.SANDBOX || !hasNextLevel);
-            buttons[0].disabled = isNextDisabled;
-            buttons[1].disabled = false; // Retry is always enabled
+            buttons[0].disabled = false; // Retry is always enabled
+            buttons[1].disabled = isNextDisabled; // Next might be disabled
             buttons.forEach(btn => btn.classList.add('results-label-active'));
         } else { // Game mode
             labels[0].textContent = "";
@@ -549,7 +552,8 @@ class UIManager {
         });
         this.levelSelectMenuButton?.addEventListener('click', callbacks.onShowMainMenu);
 
-        // Results Screen
+        // Results Screen Buttons (If you add explicit buttons besides paddles)
+        // e.g., this.resultsRetryButton?.addEventListener('click', callbacks.onRetry);
         this.levelSelectButton?.addEventListener('click', callbacks.onShowLevelSelect);
         this.resultsMenuButton?.addEventListener('click', callbacks.onShowMainMenu);
 

@@ -8,7 +8,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
-    <link rel="stylesheet" href="css/modal.css"> <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⌨️</text></svg>">
+    <link rel="stylesheet" href="css/modal.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⌨️</text></svg>">
 </head>
 <body>
     <div id="game-container">
@@ -17,33 +18,47 @@
 
             <div id="game-ui-wrapper" class="hidden">
                  <button id="game-menu-button" class="menu-nav-button" title="Main Menu">☰ Menu</button>
+                 <div id="top-spacer"></div>
                  <div id="text-display-wrapper">
-                    <div id="text-display"></div>
-                </div>
+                    <div id="text-display">
+                        </div>
+                 </div>
+
                  <div id="target-pattern-outer-wrapper">
                      <div id="target-pattern-container" class="pattern-container">
                         </div>
-                    <button id="toggle-hint-button" class="hint-toggle" title="Toggle Hint Visibility">
-                        <svg class="icon-visible" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                          <circle cx="12" cy="12" r="3"></circle>
-                        </svg>
-                        <svg class="icon-hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M3 10c4 4 14 4 18 0"></path>
-                          <line x1="6" y1="14" x2="6" y2="17"></line>
-                          <line x1="9" y1="14" x2="9" y2="17"></line>
-                          <line x1="12" y1="14" x2="12" y2="17"></line>
-                          <line x1="15" y1="14" x2="15" y2="17"></line>
-                          <line x1="18" y1="14" x2="18" y2="17"></line>
-                        </svg>
-                    </button>
-                </div>
-                 <div id="user-pattern-container" class="pattern-container">
-                    </div>
-               
-            </div>
+                     <button id="toggle-hint-button" class="hint-toggle" title="Toggle Hint Visibility">
+                         <svg class="icon-visible" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+                           <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                           <circle cx="12" cy="12" r="3"></circle>
+                         </svg>
+                         <svg class="icon-hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+                           <path d="M3 10c4 4 14 4 18 0"></path>
+                           <line x1="6" y1="14" x2="6" y2="17"></line>
+                           <line x1="9" y1="14" x2="9" y2="17"></line>
+                           <line x1="12" y1="14" x2="12" y2="17"></line>
+                           <line x1="15" y1="14" x2="15" y2="17"></line>
+                           <line x1="18" y1="14" x2="18" y2="17"></line>
+                         </svg>
+                     </button>
+                 </div>
 
-            <div id="playback-area" class="hidden">
+                 <div id="user-pattern-container" class="pattern-container">
+                     </div>
+
+                 <div id="volume-control-area">
+                    <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="1">
+                    <div id="speaker-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                            <path id="speaker-wave-1" d="M15.54 8.46a5 5 0 0 1 0 7.07" style="display: none;"></path>
+                            <path id="speaker-wave-2" d="M19.07 4.93a10 10 0 0 1 0 14.14" style="display: none;"></path>
+                            <path id="speaker-wave-3" d="M22.6 1.4a15 15 0 0 1 0 21.2" style="display: none;"></path>
+                        </svg>
+                    </div>
+                 </div>
+
+            </div> <div id="playback-area" class="hidden">
                  <button id="playback-menu-button" class="menu-nav-button" title="Main Menu">☰ Menu</button>
                  <h2>Sentence Playback</h2>
                  <label for="playback-input">Enter text to play:</label>
@@ -82,20 +97,18 @@
                     <p id="results-accuracy"></p>
                 </div>
                 <p id="level-unlock-message"></p>
+                <p class="results-instructions">Press <span class="key-hint">.</span>/<span class="key-hint">J</span> (Retry) or <span class="key-hint">-</span>/<span class="key-hint">K</span> (Next)</p>
                 <div>
-                    
-                    </div>
+                    <button id="level-select-button">Level Select</button> </div>
             </div>
 
             <div id="level-selection-screen" class="hidden overlay">
                 <button id="level-select-menu-button" class="menu-nav-button" title="Main Menu">☰ Menu</button>
-                 <h2></h2>
+                 <h2>Select Level</h2>
                 <div id="level-list"></div>
             </div>
 
-        </div>
-
-        <div id="input-area" class="hidden">
+        </div> <div id="input-area" class="hidden">
             <button id="dit-button" class="morse-button">
                 <svg class="paddle-svg" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg"><circle cx="25" cy="25" r="15" /></svg>
                 <span class="paddle-label"></span>
@@ -132,10 +145,9 @@
             </div>
         </div>
 
-    </div>
-
-    <script src="js/config.js"></script>
-    <script src="js/modal.js"></script> <script src="js/audioPlayer.js"></script>
+    </div> <script src="js/config.js"></script>
+    <script src="js/modal.js"></script>
+    <script src="js/audioPlayer.js"></script>
     <script src="js/gameState.js"></script>
     <script src="js/scoreCalculator.js"></script>
     <script src="js/levelManager.js"></script>

@@ -1,3 +1,4 @@
+/* Dit-Dah-Dash/js/config.js */
 /**
  * js/config.js
  * --------------
@@ -305,6 +306,7 @@ const AUDIO_DEFAULT_TONE_FREQUENCY = 400; // Default frequency in Hz
 const AUDIO_RAMP_TIME = 0.005; // Fade in/out time for tones (seconds)
 const AUDIO_MIN_FREQUENCY = 200; // Minimum adjustable frequency
 const AUDIO_MAX_FREQUENCY = 1000; // Maximum adjustable frequency
+const AUDIO_DEFAULT_VOLUME = 1.0; // Default volume (0.0 to 1.0)
 
 // --- Scoring ---
 const INCORRECT_ATTEMPT_PENALTY = 0.1;
@@ -325,6 +327,7 @@ const STORAGE_KEY_SETTINGS_WPM = `${STORAGE_KEY_PREFIX}settingsWpm`;
 const STORAGE_KEY_SETTINGS_SOUND = `${STORAGE_KEY_PREFIX}settingsSound`;
 const STORAGE_KEY_SETTINGS_DARK_MODE = `${STORAGE_KEY_PREFIX}settingsDarkMode`;
 const STORAGE_KEY_SETTINGS_FREQUENCY = `${STORAGE_KEY_PREFIX}settingsFrequency`;
+const STORAGE_KEY_SETTINGS_VOLUME = `${STORAGE_KEY_PREFIX}settingsVolume`; // New volume key
 const STORAGE_KEY_SETTINGS_DIT_KEY = `${STORAGE_KEY_PREFIX}settingsDitKey`; // Not currently used for customization
 const STORAGE_KEY_SETTINGS_DAH_KEY = `${STORAGE_KEY_PREFIX}settingsDahKey`; // Not currently used for customization
 const STORAGE_KEY_SETTINGS_HINT_VISIBLE = `${STORAGE_KEY_PREFIX}settingsHintVisible`; // Used for hint toggle
@@ -356,6 +359,7 @@ window.MorseConfig = {
     // Audio
     AUDIO_DEFAULT_TONE_FREQUENCY, AUDIO_RAMP_TIME,
     AUDIO_MIN_FREQUENCY, AUDIO_MAX_FREQUENCY,
+    AUDIO_DEFAULT_VOLUME,
 
     // Scoring
     INCORRECT_ATTEMPT_PENALTY,
@@ -368,6 +372,7 @@ window.MorseConfig = {
     STORAGE_KEY_HIGH_SCORES, STORAGE_KEY_UNLOCKED_LEVELS,
     STORAGE_KEY_SETTINGS_WPM, STORAGE_KEY_SETTINGS_SOUND,
     STORAGE_KEY_SETTINGS_DARK_MODE, STORAGE_KEY_SETTINGS_FREQUENCY,
+    STORAGE_KEY_SETTINGS_VOLUME,
     STORAGE_KEY_SETTINGS_DIT_KEY, STORAGE_KEY_SETTINGS_DAH_KEY,
     STORAGE_KEY_SETTINGS_HINT_VISIBLE,
 

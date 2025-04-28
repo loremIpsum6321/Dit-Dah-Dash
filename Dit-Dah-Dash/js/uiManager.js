@@ -1,3 +1,4 @@
+/* Dit-Dah-Dash/js/uiManager.js */
 /* In file: js/uiManager.js */
 /**
  * js/uiManager.js
@@ -7,6 +8,10 @@
  * and paddle label changes.
  * Includes fixes for fixed cursor/scrolling text and correct input feedback.
  * Uses separate timeouts for correct/incorrect feedback.
+ * Adds volume control elements, state, and methods.
+ * Adds Hint Peeking functionality using Control key.
+ * **v2 Changes:**
+ * - Correct feedback now applies to both user and target pattern containers.
  */
 
 class UIManager {
@@ -51,6 +56,13 @@ class UIManager {
         this.ditPaddleSvg = this.ditButton?.querySelector('.paddle-svg');
         this.dahPaddleSvg = this.dahButton?.querySelector('.paddle-svg');
 
+        // Volume Control Elements
+        this.volumeControlArea = document.getElementById('volume-control-area');
+        this.volumeSlider = document.getElementById('volume-slider');
+        this.speakerIcon = document.getElementById('speaker-icon');
+        this.speakerWave1 = document.getElementById('speaker-wave-1');
+        this.speakerWave2 = document.getElementById('speaker-wave-2');
+        this.speakerWave3 = document.getElementById('speaker-wave-3');
 
         // Playback Mode Elements
         this.playbackInput = document.getElementById('playback-input');
@@ -100,9 +112,13 @@ class UIManager {
         // Internal State & Constants
         this.currentWpm = MorseConfig.DEFAULT_WPM;
         this.currentFrequency = MorseConfig.AUDIO_DEFAULT_TONE_FREQUENCY;
+        this.currentVolume = MorseConfig.AUDIO_DEFAULT_VOLUME; // Add volume state
         this.isSoundEnabled = true;
         this.isDarkModeEnabled = false;
         this.isHintVisible = MorseConfig.HINT_DEFAULT_VISIBLE;
+        this.isControlHeld = false; // For hint peeking
+        this.hintWasVisibleBeforePeek = false; // For hint peeking logic
+
         // --- Separate Timeouts for feedback ---
         this._incorrectFlashTimeout = null; // Timeout for incorrect character flash
         this._incorrectPatternTimeout = null; // Timeout for incorrect pattern flash
@@ -115,6 +131,8 @@ class UIManager {
         this._loadSettings();
         this._updateWpmDisplay(this.currentWpm);
         this._updateFrequencyDisplay(this.currentFrequency);
+        this._updateVolumeSliderUI(this.currentVolume); // Update volume UI
+        this._updateSpeakerIcon(this.currentVolume);     // Update speaker UI
         this._applyDarkMode(this.isDarkModeEnabled);
         this._applyHintVisibility(this.isHintVisible);
         if (this.soundToggle) this.soundToggle.checked = this.isSoundEnabled;
@@ -127,6 +145,11 @@ class UIManager {
         if (this.wpmSlider) {
             this.wpmSlider.value = this.currentWpm;
         }
+        // Ensure volume slider value reflects loaded state
+        if (this.volumeSlider) {
+            this.volumeSlider.value = this.currentVolume;
+        }
+        this._addGlobalEventListeners(); // Add global listeners for hint peek
     }
 
     // --- UI View Management ---
@@ -279,45 +302,45 @@ class UIManager {
 
     /**
      * Sets the visual state (default, correct, incorrect) for the pattern containers.
+     * Applies feedback to both user and target containers.
      * Uses separate timeouts for correct and incorrect feedback.
      * @param {'default' | 'correct' | 'incorrect'} state - The state to apply.
      */
     setPatternDisplayState(state) {
-        // Only target the user input container for feedback colors
-        const container = this.userPatternContainer;
-        if (!container) return;
+        const containers = [this.userPatternContainer, this.targetPatternContainer];
+        if (!containers[0] || !containers[1]) return;
 
-        // Clear any existing timeouts for the type of feedback we *aren't* setting
+        // Clear existing timeouts for the *other* states
         if (state !== 'correct' && this._correctPatternTimeout) {
             clearTimeout(this._correctPatternTimeout);
             this._correctPatternTimeout = null;
+            containers.forEach(c => c?.classList.remove('correct-pattern'));
         }
         if (state !== 'incorrect' && this._incorrectPatternTimeout) {
             clearTimeout(this._incorrectPatternTimeout);
             this._incorrectPatternTimeout = null;
+            containers.forEach(c => c?.classList.remove('incorrect-pattern'));
         }
 
-        // Remove previous feedback states explicitly before adding new one
-        container.classList.remove('correct-pattern', 'incorrect-pattern');
+        // Remove previous states explicitly before adding new one
+        containers.forEach(c => {
+            c?.classList.remove('correct-pattern', 'incorrect-pattern');
+        });
 
         if (state === 'correct') {
-            // Apply the correct state class
-            container.classList.add('correct-pattern');
-            // Set a timeout to remove the correct class
+            containers.forEach(c => c?.classList.add('correct-pattern'));
             this._correctPatternTimeout = setTimeout(() => {
-                container.classList.remove('correct-pattern');
+                containers.forEach(c => c?.classList.remove('correct-pattern'));
                 this._correctPatternTimeout = null;
-            }, MorseConfig.INCORRECT_FLASH_DURATION); // Use same duration for simplicity
+            }, MorseConfig.INCORRECT_FLASH_DURATION); // Use same duration
         } else if (state === 'incorrect') {
-            // Apply the incorrect state class
-            container.classList.add('incorrect-pattern');
-            // Set a timeout to remove the incorrect class
+            containers.forEach(c => c?.classList.add('incorrect-pattern'));
             this._incorrectPatternTimeout = setTimeout(() => {
-                container.classList.remove('incorrect-pattern');
+                containers.forEach(c => c?.classList.remove('incorrect-pattern'));
                 this._incorrectPatternTimeout = null;
             }, MorseConfig.INCORRECT_FLASH_DURATION);
         }
-        // If state is 'default', we just remove the classes (already done above)
+        // If state is 'default', classes are already removed
     }
 
 
@@ -404,10 +427,12 @@ class UIManager {
                     if (charSpan.classList.contains('incorrect')) {
                         charSpan.classList.remove('incorrect');
                         const currentGameState = window.morseGameState;
+                        // Check if this is still the current character before reverting to 'current'
                         if (currentGameState && currentGameState.currentCharIndex === charIndex &&
-                            (currentGameState.isPlaying() || currentGameState.status === GameStatus.READY)) {
+                            (currentGameState.isPlaying() || currentGameState.status === GameStatus.READY || currentGameState.status === GameStatus.LISTENING)) {
                             charSpan.classList.add('current');
                         } else {
+                            // If it's no longer the current character (e.g., user progressed fast), revert to pending
                             charSpan.classList.add('pending');
                         }
                     }
@@ -425,6 +450,7 @@ class UIManager {
             }
         }
     }
+
 
     /**
      * Highlights the next character, updates the target pattern, and clears user input.
@@ -495,8 +521,88 @@ class UIManager {
     // --- Settings ---
     _updateWpmDisplay(wpm) { if(this.wpmValueDisplay) this.wpmValueDisplay.textContent = wpm; }
     _updateFrequencyDisplay(freq) { if(this.frequencyValueDisplay) this.frequencyValueDisplay.textContent = freq; }
-    _saveSettings() { try { localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_WPM, this.currentWpm); localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_SOUND, this.isSoundEnabled); localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_DARK_MODE, this.isDarkModeEnabled); localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_FREQUENCY, this.currentFrequency); localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_HINT_VISIBLE, this.isHintVisible); } catch (e) { console.error("Error saving settings:", e); } }
-    _loadSettings() { try { const savedWpm = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_WPM); const savedSound = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_SOUND); const savedDarkMode = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_DARK_MODE); const savedFrequency = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_FREQUENCY); const savedHintVisible = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_HINT_VISIBLE); this.currentWpm = savedWpm !== null ? parseInt(savedWpm, 10) : MorseConfig.DEFAULT_WPM; this.isSoundEnabled = savedSound !== null ? JSON.parse(savedSound) : true; this.isDarkModeEnabled = savedDarkMode !== null ? JSON.parse(savedDarkMode) : false; this.currentFrequency = savedFrequency !== null ? parseInt(savedFrequency, 10) : MorseConfig.AUDIO_DEFAULT_TONE_FREQUENCY; this.isHintVisible = savedHintVisible !== null ? JSON.parse(savedHintVisible) : MorseConfig.HINT_DEFAULT_VISIBLE; this.currentFrequency = Math.max(MorseConfig.AUDIO_MIN_FREQUENCY, Math.min(MorseConfig.AUDIO_MAX_FREQUENCY, this.currentFrequency)); } catch (e) { console.error("Error loading settings:", e); this.currentWpm = MorseConfig.DEFAULT_WPM; this.isSoundEnabled = true; this.isDarkModeEnabled = false; this.currentFrequency = MorseConfig.AUDIO_DEFAULT_TONE_FREQUENCY; this.isHintVisible = MorseConfig.HINT_DEFAULT_VISIBLE; } this._updateWpmDisplay(this.currentWpm); this._updateFrequencyDisplay(this.currentFrequency); if(this.wpmSlider) this.wpmSlider.value = this.currentWpm; if(this.frequencySlider) this.frequencySlider.value = this.currentFrequency; if(this.soundToggle) this.soundToggle.checked = this.isSoundEnabled; if(this.darkModeToggle) this.darkModeToggle.checked = this.isDarkModeEnabled; }
+
+    // --- Volume UI Updates ---
+    /**
+     * Updates the visual appearance of the volume slider's position.
+     * @param {number} volume - Volume level (0.0 to 1.0).
+     * @private
+     */
+    _updateVolumeSliderUI(volume) {
+        if (this.volumeSlider) {
+            this.volumeSlider.value = volume;
+        }
+    }
+
+    /**
+     * Updates the speaker icon display based on the volume level.
+     * @param {number} volume - Volume level (0.0 to 1.0).
+     * @private
+     */
+    _updateSpeakerIcon(volume) {
+        const waves = [this.speakerWave1, this.speakerWave2, this.speakerWave3];
+        waves.forEach(wave => { if (wave) wave.style.display = 'none'; });
+
+        if (volume > 0.7) {
+            if (this.speakerWave3) this.speakerWave3.style.display = 'inline';
+        }
+        if (volume > 0.3) { // Also show wave 2 if volume > 0.3
+            if (this.speakerWave2) this.speakerWave2.style.display = 'inline';
+        }
+        if (volume > 0) { // Also show wave 1 if volume > 0
+            if (this.speakerWave1) this.speakerWave1.style.display = 'inline';
+        }
+        // If volume is 0, all waves remain hidden.
+    }
+    // --- End Volume UI Updates ---
+
+    _saveSettings() {
+         try {
+             localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_WPM, this.currentWpm);
+             localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_SOUND, this.isSoundEnabled);
+             localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_DARK_MODE, this.isDarkModeEnabled);
+             localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_FREQUENCY, this.currentFrequency);
+             localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_HINT_VISIBLE, this.isHintVisible); // Save hint toggle state
+             localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_VOLUME, this.currentVolume); // Save volume
+             console.log("Settings Saved:", { wpm: this.currentWpm, sound: this.isSoundEnabled, dark: this.isDarkModeEnabled, freq: this.currentFrequency, hint: this.isHintVisible, volume: this.currentVolume });
+         } catch (e) {
+             console.error("Error saving settings:", e);
+         }
+     }
+
+    _loadSettings() {
+        try {
+            const savedWpm = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_WPM);
+            const savedSound = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_SOUND);
+            const savedDarkMode = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_DARK_MODE);
+            const savedFrequency = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_FREQUENCY);
+            const savedHintVisible = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_HINT_VISIBLE); // Load hint
+            const savedVolume = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_VOLUME); // Load volume
+
+            this.currentWpm = savedWpm !== null ? parseInt(savedWpm, 10) : MorseConfig.DEFAULT_WPM;
+            this.isSoundEnabled = savedSound !== null ? JSON.parse(savedSound) : true;
+            this.isDarkModeEnabled = savedDarkMode !== null ? JSON.parse(savedDarkMode) : false;
+            this.currentFrequency = savedFrequency !== null ? parseInt(savedFrequency, 10) : MorseConfig.AUDIO_DEFAULT_TONE_FREQUENCY;
+            this.isHintVisible = savedHintVisible !== null ? JSON.parse(savedHintVisible) : MorseConfig.HINT_DEFAULT_VISIBLE; // Load hint state
+            this.currentVolume = savedVolume !== null ? parseFloat(savedVolume) : MorseConfig.AUDIO_DEFAULT_VOLUME; // Load volume state
+
+            // Clamp frequency and volume to valid ranges
+            this.currentFrequency = Math.max(MorseConfig.AUDIO_MIN_FREQUENCY, Math.min(MorseConfig.AUDIO_MAX_FREQUENCY, this.currentFrequency));
+            this.currentVolume = Math.max(0.0, Math.min(1.0, this.currentVolume));
+
+            console.log("Settings Loaded:", { wpm: this.currentWpm, sound: this.isSoundEnabled, dark: this.isDarkModeEnabled, freq: this.currentFrequency, hint: this.isHintVisible, volume: this.currentVolume });
+        } catch (e) {
+            console.error("Error loading settings:", e);
+            this.currentWpm = MorseConfig.DEFAULT_WPM;
+            this.isSoundEnabled = true;
+            this.isDarkModeEnabled = false;
+            this.currentFrequency = MorseConfig.AUDIO_DEFAULT_TONE_FREQUENCY;
+            this.isHintVisible = MorseConfig.HINT_DEFAULT_VISIBLE; // Default hint state on error
+            this.currentVolume = MorseConfig.AUDIO_DEFAULT_VOLUME; // Default volume on error
+        }
+        // Update UI elements to reflect loaded state (done in constructor)
+    }
+
     setButtonActive(buttonType, isActive) { const button = buttonType === 'dit' ? this.ditButton : this.dahButton; if (button) button.classList.toggle('active', isActive); }
 
     /** Updates paddle content for game vs results mode. */
@@ -526,9 +632,99 @@ class UIManager {
 
     setPlaybackButtonEnabled(enabled, text = 'Play Morse') { if (this.playSentenceButton) { this.playSentenceButton.disabled = !enabled; this.playSentenceButton.textContent = text; } }
     _applyDarkMode(enable) { this.bodyElement.classList.toggle('dark-mode', enable); }
-    _applyHintVisibility(visible) { this.targetPatternOuterWrapper?.classList.toggle('hint-hidden', !visible); this.toggleHintButton?.setAttribute('aria-pressed', visible); }
+
+    /**
+     * Applies the visual hint visibility state, respecting the peek state.
+     * @param {boolean} visible - The desired visibility state (true for visible, false for hidden).
+     * @private
+     */
+    _applyHintVisibility(visible) {
+        // Ignore if Control is held and we're trying to apply the non-peek state
+        if (this.isControlHeld && visible !== this.hintWasVisibleBeforePeek) {
+            // Currently peeking, apply the temporary peek state instead
+            this.targetPatternOuterWrapper?.classList.toggle('hint-hidden', false); // Force visible during peek
+        } else {
+            // Not peeking, or applying the original state after peek, apply normally
+            this.targetPatternOuterWrapper?.classList.toggle('hint-hidden', !visible);
+        }
+         // Update ARIA attribute based on the *intended* persistent state (isHintVisible)
+        this.toggleHintButton?.setAttribute('aria-pressed', String(this.isHintVisible));
+    }
+
+
+    /**
+     * Handles the global keydown event, primarily for hint peeking.
+     * @param {KeyboardEvent} event - The keydown event.
+     * @private
+     */
+     _handleGlobalKeyDown(event) {
+        // Ignore if focus is on an input field, text area, or settings modal is open
+        const targetElement = event.target;
+        const isInputFocused = targetElement.tagName === 'INPUT' || targetElement.tagName === 'TEXTAREA';
+        const isSettingsOpen = this.settingsModal && !this.settingsModal.classList.contains('hidden');
+        // Only peek if game UI is visible
+        const isGameVisible = this.gameUiWrapper && !this.gameUiWrapper.classList.contains('hidden');
+
+        if (isInputFocused || isSettingsOpen || !isGameVisible) {
+            return;
+        }
+
+        // Hint Peek Logic
+        if (event.key === 'Control' && !this.isControlHeld) {
+            this.isControlHeld = true;
+            this.hintWasVisibleBeforePeek = this.isHintVisible; // Store original state
+            if (!this.hintWasVisibleBeforePeek) {
+                // console.log("Peek: Showing hint"); // Debug
+                this._applyHintVisibility(true); // Temporarily show if it was hidden
+            }
+            // If it was already visible, we don't do anything on keydown, only on keyup
+        }
+    }
+
+    /**
+     * Handles the global keyup event, primarily for hint peeking.
+     * @param {KeyboardEvent} event - The keyup event.
+     * @private
+     */
+    _handleGlobalKeyUp(event) {
+         // Hint Peek Logic
+         if (event.key === 'Control') {
+            if (this.isControlHeld) { // Only act if we were tracking the hold
+                 this.isControlHeld = false;
+                 if (!this.hintWasVisibleBeforePeek) {
+                     // console.log("Peek End: Hiding hint"); // Debug
+                     // It was hidden, peeked, now hide it again
+                     this._applyHintVisibility(false);
+                 } else {
+                     // console.log("Peek End: Toggling hint OFF"); // Debug
+                     // It was visible, user held/released Ctrl, so toggle it OFF
+                     this.isHintVisible = false;
+                     this._saveSettings(); // Save the new OFF state
+                     this._applyHintVisibility(false);
+                     // Optional: Notify main.js if needed
+                     if (this.callbacks && this.callbacks.onHintToggle) this.callbacks.onHintToggle(this.isHintVisible);
+                 }
+            }
+         }
+    }
+
+
+    /**
+     * Adds global event listeners needed by the UI manager (e.g., hint peek).
+     * @private
+     */
+    _addGlobalEventListeners() {
+        document.addEventListener('keydown', this._handleGlobalKeyDown.bind(this));
+        document.addEventListener('keyup', this._handleGlobalKeyUp.bind(this));
+        // Add listeners to remove focus from volume slider
+        this.volumeSlider?.addEventListener('mouseup', () => this.volumeSlider.blur());
+        this.volumeSlider?.addEventListener('touchend', () => this.volumeSlider.blur());
+    }
+
 
     addEventListeners(callbacks) {
+        this.callbacks = callbacks; // Store callbacks for hint peek logic
+
         // Main Menu
         this.startGameButton?.addEventListener('click', callbacks.onShowLevelSelect);
         this.showSandboxButton?.addEventListener('click', callbacks.onShowSandbox);
@@ -552,8 +748,7 @@ class UIManager {
         });
         this.levelSelectMenuButton?.addEventListener('click', callbacks.onShowMainMenu);
 
-        // Results Screen Buttons (If you add explicit buttons besides paddles)
-        // e.g., this.resultsRetryButton?.addEventListener('click', callbacks.onRetry);
+        // Results Screen Buttons
         this.levelSelectButton?.addEventListener('click', callbacks.onShowLevelSelect);
         this.resultsMenuButton?.addEventListener('click', callbacks.onShowMainMenu);
 
@@ -566,8 +761,33 @@ class UIManager {
         this.darkModeToggle?.addEventListener('change', (e) => { this.isDarkModeEnabled = e.target.checked; this._applyDarkMode(this.isDarkModeEnabled); this._saveSettings(); if (callbacks.onDarkModeToggle) callbacks.onDarkModeToggle(this.isDarkModeEnabled); });
         this.resetProgressButton?.addEventListener('click', () => { if (callbacks.onResetProgress) callbacks.onResetProgress(); });
 
+        // Volume Slider (Game UI)
+         this.volumeSlider?.addEventListener('input', (e) => {
+             const newVolume = parseFloat(e.target.value);
+             this._updateSpeakerIcon(newVolume); // Update icon immediately on input
+             // Pass intermediate value for immediate audio feedback if desired
+             if (callbacks.onVolumeChange) { // Use the existing callback name
+                 callbacks.onVolumeChange(newVolume);
+             }
+         });
+         this.volumeSlider?.addEventListener('change', (e) => {
+             const newVolume = parseFloat(e.target.value);
+             this.currentVolume = newVolume;
+             this._saveSettings(); // Save final value on change
+             // Final update call might be redundant if 'input' already called it,
+             // but ensures the final saved value is applied.
+             if (callbacks.onVolumeChange) {
+                 callbacks.onVolumeChange(this.currentVolume);
+             }
+         });
+
         // Game UI
-        this.toggleHintButton?.addEventListener('click', () => { this.isHintVisible = !this.isHintVisible; this._applyHintVisibility(this.isHintVisible); this._saveSettings(); if (callbacks.onHintToggle) callbacks.onHintToggle(this.isHintVisible); });
+        this.toggleHintButton?.addEventListener('click', () => {
+            this.isHintVisible = !this.isHintVisible; // Toggle the *actual* state
+            this._saveSettings(); // Save the new state
+            this._applyHintVisibility(this.isHintVisible); // Apply the visual change
+            if (callbacks.onHintToggle) callbacks.onHintToggle(this.isHintVisible);
+        });
         this.gameMenuButton?.addEventListener('click', callbacks.onShowMainMenu);
 
         // Resize handler
@@ -592,6 +812,7 @@ class UIManager {
     getInitialDarkModeState() { return this.isDarkModeEnabled; }
     getInitialFrequency() { return this.currentFrequency; }
     getInitialHintState() { return this.isHintVisible; }
+    getInitialVolume() { return this.currentVolume; } // Added getter for volume
     getPlaybackSentence() { return this.playbackInput ? this.playbackInput.value : ""; }
     getSandboxSentence() { return this.sandboxInput ? this.sandboxInput.value : ""; }
 }

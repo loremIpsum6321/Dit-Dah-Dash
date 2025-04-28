@@ -1,3 +1,4 @@
+/* Dit-Dah-Dash/css/style.css */
 /* In file: css/style.css */
 /**
  * css/style.css
@@ -7,6 +8,13 @@
  * Updates pattern container width, text display size, and fixed cursor behavior.
  * Further increases pattern container/SVG size.
  * Adds correct-pattern styling.
+ * Adds styles for volume slider and speaker icon.
+ * Modifies volume slider to be horizontal.
+ * Reverts layout: Sentence Top, Patterns/Volume Middle.
+ * **v2 Changes:**
+ * - Added flex centering to .morse-button.
+ * - Increased #dah-button .paddle-svg height slightly.
+ * - Added .correct-pattern styles for both pattern containers.
  */
 
 /* --- Global Styles & Resets --- */
@@ -39,8 +47,8 @@
     --char-completed-color: #4CAF50;
     --char-incorrect-bg: #f44336;
     --char-incorrect-color: white;
-    --stats-bg: #f8f8f8;
-    --stats-color: #555;
+    --stats-bg: #f8f8f8; /* No longer used in game UI */
+    --stats-color: #555; /* Used in results UI */
     --stats-border: 1px solid #eee;
     --playback-input-bg: white;
     --playback-input-border: 1px solid #ccc;
@@ -76,6 +84,10 @@
     --paddle-label-results-color: var(--button-text-color); /* Use button text color */
     --star-empty-color: #ccc;
     --star-filled-color: #ffc107; /* Gold */
+    --volume-slider-track-bg: #ccc;
+    --volume-slider-thumb-bg: #555;
+    --volume-slider-thumb-border: 2px solid var(--container-bg);
+    --speaker-icon-color: var(--hint-toggle-color);
 }
 
 .dark-mode {
@@ -105,8 +117,8 @@
     --char-completed-color: #81C784;
     --char-incorrect-bg: #f44336;
     --char-incorrect-color: white;
-    --stats-bg: #3a3a3a;
-    --stats-color: #bdbdbd;
+    --stats-bg: #3a3a3a; /* Used in results UI */
+    --stats-color: #bdbdbd; /* Used in results UI */
     --stats-border: 1px solid #555;
     --playback-input-bg: #555;
     --playback-input-border: 1px solid #777;
@@ -142,6 +154,10 @@
     --paddle-label-results-color: var(--button-text-color); /* Use button text color */
     --star-empty-color: #777;
     --star-filled-color: #ffeb3b; /* Brighter yellow for dark mode */
+    --volume-slider-track-bg: #555;
+    --volume-slider-thumb-bg: #bbb;
+    --volume-slider-thumb-border: 2px solid var(--container-bg);
+    --speaker-icon-color: var(--hint-toggle-color);
 }
 
 
@@ -156,7 +172,7 @@ html, body {
 #game-container { display: flex; flex-direction: column; width: 100%; height: 100%; position: fixed; top: 0; left: 0; }
 #display-area {
     width: 100%; height: 80%; /* Default height */
-    display: flex; flex-direction: column;
+    display: flex; flex-direction: column; /* Children stack vertically */
     padding: 10px 15px; position: relative;
     background-color: var(--container-bg);
     border-bottom: 2px solid var(--border-color); overflow: hidden;
@@ -169,6 +185,12 @@ html, body {
     transition: background-color 0.3s ease, height 0.3s ease;
 }
 
+#top-spacer {
+    height: 190px; /* Approximate height of patterns + volume + margins */
+    flex-shrink: 0; /* Prevent it from shrinking */
+    width: 100%;   /* Take full width */
+    /* background-color: rgba(255, 0, 0, 0.1); /* Optional: for debugging layout */
+}
 /* --- Menu Navigation Button --- */
 .menu-nav-button {
     position: absolute;
@@ -191,21 +213,13 @@ html, body {
 }
 
 /* --- Game Mode UI Wrapper --- */
-#game-ui-wrapper { display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden; position: relative; }
-
-/* Hide specific elements during results mode using the results-active class */
-#game-ui-wrapper.results-active #text-display-wrapper,
-#game-ui-wrapper.results-active #target-pattern-outer-wrapper,
-#game-ui-wrapper.results-active #user-pattern-container,
-#game-ui-wrapper.results-active #toggle-hint-button {
-    display: none;
-}
-/* Ensure stats display stays visible during results */
-#game-ui-wrapper.results-active #stats-display {
-    display: flex; /* Ensure it remains visible */
-    border-top: none; /* Optional: remove top border when only stats are shown */
-    margin-top: 0; /* Adjust margin if needed */
-    padding: 8px 0;
+#game-ui-wrapper {
+    display: flex;
+    flex-direction: column; /* Stack children vertically */
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    position: relative;
 }
 
 
@@ -214,7 +228,12 @@ html, body {
     flex-grow: 1; flex-basis: 45%; max-width: 48%; font-weight: bold; border: none;
     border-radius: 15px; cursor: pointer; color: var(--button-text-color); box-shadow: var(--button-shadow);
     transition: background-color 0.1s ease, transform 0.05s ease, box-shadow 0.1s ease;
-    display: flex; flex-direction: column; justify-content: center; align-items: center; user-select: none;
+    /* Flexbox centering for content (SVG + Label) */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    user-select: none;
     -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none;
     height: 100%; padding: 10px; overflow: hidden; position: relative; /* For absolute positioning label if needed */
 }
@@ -223,12 +242,20 @@ html, body {
     display: none;
 }
 .morse-button .paddle-svg { /* Style for the SVG when normally visible */
-    width: 20%; max-height: 40%; min-height: 25px; fill: currentColor;
-    pointer-events: none; flex-shrink: 0; margin-bottom: 5px;
+    width: 20%; max-height: 40%; /* Relative to button height */
+    min-height: 25px; fill: currentColor;
+    pointer-events: none; flex-shrink: 0;
+    margin-bottom: -36px; /* Space between SVG and label */
     transition: display 0s; /* Instant transition for display property */
 }
-#dit-button .paddle-svg { height: 30%; }
-#dah-button .paddle-svg { height: 45%; } /* Dah slightly taller */
+
+/* Removed fixed height for dit */
+/* #dit-button .paddle-svg { height: 30%; } */
+
+/* Slightly increased dah height */
+#dah-button .paddle-svg {
+    max-height: 45%; /* Slightly larger max height for dah */
+}
 
 .paddle-label {
     font-size: 1.6em; /* Make label larger for results */
@@ -260,19 +287,22 @@ html, body {
 }
 
 
-/* --- Text Display (Game Mode) --- */
+/* --- Text Display (Game Mode - Top) --- */
 #text-display-wrapper {
-    display: flex; align-items: center; flex-grow: 1;
+    display: flex; align-items: center;
     padding: 10px 0;
     overflow-x: hidden; /* Disable user scrolling */
     overflow-y: hidden; line-height: 1.3;
     width: 100%; /* Take full width */
     max-width: 98%; /* Small horizontal padding */
-    margin: 5px auto;
+    margin: 5px auto; /* Adjust margin */
     border: var(--text-display-border); border-radius: 8px; background-color: var(--text-display-wrapper-bg);
     transition: background-color 0.3s ease, border-color 0.3s ease; position: relative;
     /* Cursor indicates text is not directly interactable */
     cursor: default;
+    flex-grow: 1; /* Allow text display to take up available space */
+    min-height: 100px; /* Ensure minimum height */
+    flex-shrink: 1; /* Allow shrinking if needed */
 }
 #text-display {
     font-size: 4em; /* Increase base font size slightly */
@@ -294,13 +324,13 @@ html, body {
 @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
 .char.space { display: inline-block; min-width: 0.4em; }
 
-/* --- Pattern Displays (Game Mode) --- */
+/* --- Pattern Displays (Game Mode - Middle) --- */
 #target-pattern-outer-wrapper {
-    position: relative;
+    position: relative; /* Keep relative for hint toggle positioning */
     width: 95%; /* Further widen */
     max-width: 550px; /* Further widen max */
-    margin: 10px auto; /* Increase margin slightly */
-    flex-shrink: 0;
+    margin: 10px auto 5px auto; /* Top margin */
+    flex-shrink: 0; /* Don't shrink */
 }
 .pattern-container {
     width: 100%;
@@ -315,8 +345,8 @@ html, body {
     transition: background-color 0.15s ease-in-out;
 }
 #user-pattern-container {
-    margin: 10px auto; /* Increase margin slightly */
-    flex-shrink: 0;
+    margin: 5px auto 5px auto; /* Reduce bottom margin */
+    flex-shrink: 0; /* Don't shrink */
     width: 95%; /* Further widen */
     max-width: 550px; /* Further widen max */
 }
@@ -325,16 +355,17 @@ html, body {
     width: 28px;  /* Larger size */
     height: 28px; /* Larger size */
     fill: var(--pattern-svg-fill);
-    transition: fill 0.15s ease-in-out, visibility 0s;
+    transition: fill 0.15s ease-in-out, visibility 0s, background-color 0.15s ease-in-out;
 }
 .pattern-container svg.pattern-dah {
     width: 42px; /* Larger size (maintain ratio) */
 }
-/* Apply feedback colors only to user input container */
-#user-pattern-container.correct-pattern { background-color: var(--pattern-correct-bg); }
-#user-pattern-container.correct-pattern svg { fill: var(--pattern-correct-fill); }
-#user-pattern-container.incorrect-pattern { background-color: var(--pattern-incorrect-bg); }
-#user-pattern-container.incorrect-pattern svg { fill: var(--pattern-incorrect-fill); }
+/* Apply feedback colors */
+.pattern-container.correct-pattern { background-color: var(--pattern-correct-bg); }
+.pattern-container.correct-pattern svg { fill: var(--pattern-correct-fill); }
+.pattern-container.incorrect-pattern { background-color: var(--pattern-incorrect-bg); }
+.pattern-container.incorrect-pattern svg { fill: var(--pattern-incorrect-fill); }
+
 
 /* Hint Visibility Styles */
 .hint-toggle { position: absolute; top: 50%; right: 5px; transform: translateY(-50%); background: none; border: none; padding: 0 3px; cursor: pointer; color: var(--hint-toggle-color); line-height: 0; transition: color 0.2s ease; z-index: 5; }
@@ -345,16 +376,121 @@ html, body {
 #target-pattern-outer-wrapper.hint-hidden > .hint-toggle > svg.icon-hidden { display: inline-block; }
 #target-pattern-outer-wrapper.hint-hidden #target-pattern-container svg { visibility: hidden; } /* Target only hint container */
 
-/* --- Stats Display (Game Mode / Results) --- */
-#stats-display {
-    display: flex; justify-content: space-around; align-items: center;
-    padding: 8px 0; font-size: 1.3em; color: var(--stats-color);
-    margin-top: auto; flex-wrap: wrap; gap: 8px 15px; /* Added horizontal gap */
-    width: 100%; flex-shrink: 0; border-top: var(--stats-border);
-    transition: color 0.3s ease, border-color 0.3s ease, display 0s;
-    order: 5; /* Ensure it's below text/patterns */
+
+/* --- Volume Control Area (Horizontal - Middle) --- */
+#volume-control-area {
+    display: flex;
+    align-items: center;
+    justify-content: center; /* Center items horizontally */
+    gap: 15px; /* Increased gap */
+    width: 60%; /* Adjust width as needed */
+    max-width: 350px; /* Max width */
+    margin: 5px auto 10px auto; /* Center block and add margin */
+    padding: 5px;
+    flex-shrink: 0; /* Prevent shrinking */
 }
-#stats-display > div { background-color: var(--stats-bg); padding: 4px 8px; border-radius: 5px; white-space: nowrap; transition: background-color 0.3s ease; }
+
+#volume-slider {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 100%; /* Take full width of its space in the flex container */
+    height: 10px; /* Horizontal slider height */
+    background: var(--volume-slider-track-bg); /* Track background */
+    border-radius: 5px; /* Rounded track */
+    cursor: pointer;
+    flex-grow: 1; /* Allow slider to take up available space */
+    order: 1; /* Slider first */
+}
+
+/* Horizontal Slider Thumb Styling */
+#volume-slider::-webkit-slider-thumb {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 20px; /* Thumb size */
+    height: 20px; /* Thumb size */
+    background: var(--volume-slider-thumb-bg);
+    border-radius: 50%; /* Round thumb (dit-like) */
+    border: var(--volume-slider-thumb-border);
+    cursor: pointer;
+    margin-top: -5px; /* Adjust vertical centering if needed */
+}
+
+#volume-slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    background: var(--volume-slider-thumb-bg);
+    border-radius: 50%;
+    border: var(--volume-slider-thumb-border);
+    cursor: pointer;
+}
+
+#volume-slider::-ms-thumb {
+    width: 20px;
+    height: 20px;
+    background: var(--volume-slider-thumb-bg);
+    border-radius: 50%;
+    border: var(--volume-slider-thumb-border);
+    cursor: pointer;
+    margin-top: 0px; /* Adjust vertical centering if needed for Edge */
+}
+
+/* Horizontal Slider Track Styling (Optional but good practice) */
+#volume-slider::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 10px;
+    background: var(--volume-slider-track-bg);
+    border-radius: 5px;
+}
+
+#volume-slider::-moz-range-track {
+    width: 100%;
+    height: 10px;
+    background: var(--volume-slider-track-bg);
+    border-radius: 5px;
+}
+
+#volume-slider::-ms-track {
+    width: 100%;
+    height: 10px;
+    background: transparent; /* IE needs transparent track */
+    border-color: transparent;
+    color: transparent;
+}
+#volume-slider::-ms-fill-lower,
+#volume-slider::-ms-fill-upper {
+    background: var(--volume-slider-track-bg);
+    border-radius: 5px;
+}
+
+
+#speaker-icon {
+    width: 32px; /* Increased from 28px */
+    height: 32px; /* Increased from 28px */
+    flex-shrink: 0; /* Prevent speaker from shrinking */
+    order: 2; /* Speaker second (to the right) */
+}
+#speaker-icon svg {
+    width: 100%;
+    height: 100%;
+    stroke: var(--speaker-icon-color);
+    transition: stroke 0.3s ease;
+    /* Ensure SVG doesn't overflow its container */
+    display: block; /* Helps prevent extra space below inline SVGs */
+    overflow: visible; /* Allow parts like waves to potentially draw slightly outside if needed, though increasing container size is preferred */
+}
+
+
+/* Waves are hidden by default in HTML, shown via JS */
+#speaker-icon svg path[id^="speaker-wave-"] {
+    transition: display 0s; /* Immediate show/hide */
+}
+
+
+
+/* --- Stats Display (Removed from Game UI, only in Results) --- */
+#stats-display {
+    display: none; /* Hide by default */
+}
 
 /* --- Playback & Sandbox Areas --- */
 #playback-area, #sandbox-area { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; gap: 15px; flex-grow: 1; overflow-y: auto; width: 100%; height: 100%; position: relative; }
@@ -399,8 +535,6 @@ html, body {
 #level-list button.completed:hover:not(:disabled) { background-color: var(--level-completed-hover-bg); }
 #level-list button:disabled { pointer-events: none; }
 
-/* In file: css/style.css */
-
 /* Results Screen Specifics */
 #results-screen {
     overflow-y: hidden; /* Prevent vertical scrolling on the overlay */
@@ -412,7 +546,11 @@ html, body {
 }
 #results-rating { margin-bottom: 15px; }
 #results-stats { margin-bottom: 10px; }
-#results-stats p { font-size: 1.2em; margin-bottom: 5px; }
+#results-stats p {
+    font-size: 1.2em;
+    margin-bottom: 5px;
+    color: var(--stats-color); /* Apply stats color */
+}
 #level-unlock-message { color: var(--char-completed-color); font-weight: bold; margin-bottom: 15px; font-size: 1.1em; min-height: 1.4em; /* Reserve space */ }
 #results-screen .results-instructions {
     font-size: 1.0em;
@@ -420,8 +558,17 @@ html, body {
     margin-bottom: 10px;
     overflow: hidden; /* Hide overflow on instructions */
 }
+#results-screen .results-instructions .key-hint {
+    display: inline-block;
+    padding: 0 4px;
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    background-color: var(--container-bg);
+    font-weight: bold;
+    font-size: 0.9em;
+}
 #results-screen div:last-of-type {
-    margin-top: 0px; /* Adjust margin as requested */
+    margin-top: 10px; /* Increased margin */
     overflow: hidden; /* Hide overflow on the button container */
 } /* Spacing for bottom buttons */
 /* Star Rating */
@@ -446,13 +593,14 @@ html, body {
 
 /* --- Responsive Adjustments --- */
 @media screen and (orientation: landscape) and (max-height: 550px) {
+    #top-spacer { display: none;}
     #display-area { height: 58%; padding: 5px 10px; }
     #input-area { height: 42%; padding: 10px; gap: 10px; }
-    #text-display-wrapper { max-width: 95%; margin: 3px auto; padding: 5px 0; line-height: 1.2; }
+    #text-display-wrapper { max-width: 95%; margin: 3px auto; padding: 5px 0; line-height: 1.2; min-height: 60px; }
     #target-pattern-outer-wrapper, #user-pattern-container { width: 90%; max-width: 400px; margin: 4px auto; } /* Adjust landscape max width */
     .pattern-container { min-height: 40px; padding: 3px 8px; gap: 3px; } /* Adjust landscape height/padding */
     .pattern-container svg { width: 20px; height: 20px; } /* Adjust landscape svg size */
-    .pattern-container svg.pattern-dah { width: 30px; } /* Adjust landscape dah size */
+    .pattern-container svg.pattern-dah { width: 48px; } /* Adjust landscape dah size */
     #stats-display { font-size: 1.0em; padding: 4px 0; gap: 5px 10px; }
     #stats-display > div { padding: 3px 6px; }
     .hint-toggle svg { width: 1.2em; height: 1.2em; }
@@ -462,15 +610,19 @@ html, body {
     .morse-button.results-label-active .paddle-label { font-size: 1.5em; }
     .menu-nav-button { font-size: 1.0em; padding: 4px 8px; top: 5px; left: 5px; }
     .overlay { padding-top: 40px; }
-    /* Ensure stats are spaced reasonably in landscape results */
-    #game-ui-wrapper.results-active #stats-display { margin-bottom: 10px; }
     .star-rating { font-size: 2em; margin-bottom: 10px;}
     #results-stats p { font-size: 1em; margin-bottom: 3px;}
     #results-screen .results-instructions { font-size: 0.9em; }
+    /* Volume Landscape */
+    #volume-control-area { width: 50%; max-width: 280px; gap: 8px; margin: 3px auto 5px auto; }
+    #volume-slider { height: 8px; }
+    #volume-slider::-webkit-slider-thumb, #volume-slider::-moz-range-thumb, #volume-slider::-ms-thumb { width: 16px; height: 16px; margin-top: -4px; }
+    #speaker-icon { width: 26px; height: 26px; }
 }
 
 /* Very Small Screens (e.g., small phones) */
 @media (max-width: 360px) {
+    #top-spacer { display: none;}
     #stats-display { font-size: 1.1em; }
     #text-display { font-size: 3.5em; } /* Slightly smaller on tiny screens */
     .overlay button:not(.menu-nav-button) { font-size: 1.1em; padding: 10px 18px; }
@@ -478,6 +630,11 @@ html, body {
     .morse-button.results-label-active .paddle-label { font-size: 1.6em; }
     #target-pattern-outer-wrapper, #user-pattern-container { width: 95%; max-width: none; } /* Take more width, remove max */
     .pattern-container svg { width: 24px; height: 24px; } /* Adjust small screen svg size */
-    .pattern-container svg.pattern-dah { width: 36px; } /* Adjust small screen dah size */
+    .pattern-container svg.pattern-dah { width: 48px; } /* Adjust small screen dah size */
     .pattern-container { min-height: 50px; gap: 4px; } /* Adjust small screen height/gap */
+    /* Volume Small Screen */
+    #volume-control-area { width: 70%; max-width: 250px; gap: 10px; margin: 3px auto 5px auto; } /* Slightly more gap */
+    #volume-slider { height: 8px; }
+    #volume-slider::-webkit-slider-thumb, #volume-slider::-moz-range-thumb, #volume-slider::-ms-thumb { width: 16px; height: 16px; margin-top: -4px; }
+    #speaker-icon { width: 28px; height: 28px; }
 }

@@ -1,3 +1,4 @@
+/* Dit-Dah-Dash/js/main.js */
 /* In file: js/main.js */
 /**
  * js/main.js
@@ -10,12 +11,18 @@
  * Handles correct input feedback trigger.
  * Connects InputHandler and AudioPlayer for tone end callbacks via InputHandler constructor.
  * Ensures early audio context initialization attempt on load.
+ * Adds volume control handling.
+ * Fixes call to getInitialVolume during initialization.
+ * **v2 Changes:**
+ * - Correct feedback calls uiManager.setPatternDisplayState('correct').
+ * - handleResultsInput calls specific retry/next functions.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log("Dit-Dah-Dash Initializing...");
 
     // --- Module Instances ---
+    // Ensure UIManager instance is created first (by its script)
     const uiManager = window.morseUIManager;
     const gameState = window.morseGameState;
     const decoder = window.morseDecoder;
@@ -35,8 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         initializeSettingsModal(); // Initialize modal first
         initializeInputHandler(); // Init InputHandler (this now connects audio callback too)
-        // initializeAudioPlayerCallbacks(); // No longer needed here, handled in InputHandler constructor
-        applyInitialSettings();
+        applyInitialSettings();   // Apply settings *after* UIManager is known to exist
         setupEventListeners();
         showMainMenu(); // Show main menu initially
         console.log("Dit-Dah-Dash Initialized.");
@@ -44,9 +50,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function initializeSettingsModal() {
         if (settingsModal) return;
+        // Check if uiManager exists before trying to use it for button ID
+        const openButtonId = uiManager?.showSettingsButton?.id || 'show-settings-button'; // Fallback ID
         settingsModal = new Modal(
             'settings-modal',       // Modal element ID
-            'show-settings-button', // Button that opens the modal
+            openButtonId,           // Button that opens the modal
             'settings-close-button',// Button that closes the modal
             'settings-modal-header', // Draggable header ID
             handleShowSettings,     // onOpen callback
@@ -56,14 +64,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function applyInitialSettings() {
+        // Ensure uiManager exists before accessing its methods
+        if (!uiManager) {
+            console.error("UIManager instance not found during applyInitialSettings!");
+            return;
+        }
         applyWpmSetting(uiManager.getInitialWpm());
         applyFrequencySetting(uiManager.getInitialFrequency());
         applySoundSetting(uiManager.getInitialSoundState());
+        applyVolumeSetting(uiManager.getInitialVolume()); // Apply initial volume - THIS LINE (Ensure uiManager is valid)
         // Dark mode is applied directly by UIManager on load
     }
 
     function initializeInputHandler() {
-        if (inputHandler) return;
+        if (inputHandler || !uiManager) return; // Also ensure uiManager exists
         // Pass the necessary instances to the InputHandler constructor
         inputHandler = new InputHandler(
             gameState,
@@ -79,10 +93,11 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log("InputHandler initialized and AudioPlayer callback connected.");
     }
 
-    /** Sets up the callback from AudioPlayer to InputHandler - REMOVED (now done in IH constructor) */
-    // function initializeAudioPlayerCallbacks() { ... } // Removed
-
     function setupEventListeners() {
+        if (!uiManager) {
+            console.error("UIManager instance not found during setupEventListeners!");
+            return;
+        }
         // Most UI events are handled within UIManager, which calls back functions here
         uiManager.addEventListeners({
             // Navigation Callbacks (from UIManager)
@@ -97,11 +112,14 @@ document.addEventListener('DOMContentLoaded', () => {
             onStartSandbox: startSandboxPractice,
             onSandboxInputChange: updateSandboxPreview,
             onLevelSelect: selectLevel, // Callback when level picked from list
+            onRetryResults: retryLevel, // Added explicit retry callback from results
+            onNextResults: nextLevel, // Added explicit next callback from results
 
             // Settings Value Changes (from UIManager elements inside modal)
             onWpmChange: applyWpmSetting,
             onFrequencyChange: applyFrequencySetting,
             onSoundToggle: applySoundSetting,
+            onVolumeChange: applyVolumeSetting, // Add volume callback
             onDarkModeToggle: applyDarkModeSetting,
             onHintToggle: applyHintSetting, // Hint toggle is still in game UI
             onResetProgress: resetProgress,
@@ -127,7 +145,7 @@ document.addEventListener('DOMContentLoaded', () => {
         gameState.reset(); // Reset state completely
         gameState.status = GameStatus.MENU;
         gameState.currentMode = AppMode.MENU;
-        uiManager.showMainMenu();
+        if (uiManager) uiManager.showMainMenu(); // Guard against missing uiManager
     }
 
     /** Handles showing the Level Selection screen */
@@ -142,7 +160,7 @@ document.addEventListener('DOMContentLoaded', () => {
         gameState.status = GameStatus.LEVEL_SELECT;
         gameState.currentMode = AppMode.GAME; // Ensure mode is game
         const levels = levelManager.getAllLevelsWithStatus();
-        uiManager.showLevelSelectionScreen(levels);
+        if (uiManager) uiManager.showLevelSelectionScreen(levels);
     }
 
     function handleShowSandboxInput() {
@@ -152,7 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
         gameState.reset();
         gameState.status = GameStatus.SANDBOX_INPUT;
         gameState.currentMode = AppMode.SANDBOX;
-        uiManager.showSandboxUI();
+        if (uiManager) uiManager.showSandboxUI();
         updateSandboxPreview();
     }
 
@@ -163,7 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
         gameState.reset();
         gameState.status = GameStatus.PLAYBACK_INPUT;
         gameState.currentMode = AppMode.PLAYBACK;
-        uiManager.showPlaybackUI();
+        if (uiManager) uiManager.showPlaybackUI();
     }
 
     /** Called when the settings modal is opened */
@@ -194,13 +212,13 @@ document.addEventListener('DOMContentLoaded', () => {
     function startGameLevel(levelId, sentenceIndex = 0) {
         console.log(`Attempting to start Level ${levelId}, Sentence ${sentenceIndex + 1}`);
         const sentenceText = levelManager.getSpecificSentence(levelId, sentenceIndex);
-        if (sentenceText === null) {
-            console.error(`Cannot start level: Invalid levelId ${levelId} / sentenceIndex ${sentenceIndex}.`);
+        if (sentenceText === null || !uiManager) {
+            console.error(`Cannot start level: Invalid levelId ${levelId} / sentenceIndex ${sentenceIndex} or UI Manager missing.`);
             showMainMenu(); return;
         }
 
         gameState.startLevelSentence(levelId, sentenceIndex, sentenceText);
-        applyCurrentSettingsToModules(); // Ensure WPM/Freq are correct
+        applyCurrentSettingsToModules(); // Ensure WPM/Freq/Volume are correct
         uiManager.showGameUI();
         uiManager.renderSentence(sentenceText);
         uiManager.resetStatsDisplay(); // Clear previous stats
@@ -227,12 +245,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function startSandboxPractice() {
+        if (!uiManager) { showMainMenu(); return; } // Need UI Manager
         const sentenceText = uiManager.getSandboxSentence();
         if (!sentenceText || !sentenceText.trim()) { alert("Please enter a sentence."); return; }
         console.log(`Attempting to start Sandbox with: "${sentenceText}"`);
 
         gameState.startSandboxSentence(sentenceText);
-        applyCurrentSettingsToModules(); // Ensure WPM/Freq are correct
+        applyCurrentSettingsToModules(); // Ensure WPM/Freq/Volume are correct
         uiManager.showGameUI();
         uiManager.renderSentence(sentenceText);
         uiManager.resetStatsDisplay(); // Clear previous stats
@@ -283,6 +302,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /** Handles the result of a character decode attempt (called by InputHandler via decoder schedule) */
     function handleCharacterDecode() {
+        if (!uiManager) return; // Need UI Manager
+
         // This function is called when the inter-character gap timeout fires.
         // The gameState.status should be DECODING at this point.
         if (gameState.status !== GameStatus.DECODING || !(gameState.currentMode === AppMode.GAME || gameState.currentMode === AppMode.SANDBOX)) {
@@ -313,6 +334,8 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                  // This means we finished the sentence while waiting for decode - should be handled by moveToNextCharacter
             }
+             // Ensure pattern feedback is reset if no sequence was decoded
+            uiManager.setPatternDisplayState('default');
             return;
         }
 
@@ -323,7 +346,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (decodedChar && targetChar && decodedChar === targetChar) {
             // --- CORRECT ---
             uiManager.updateCharacterState(gameState.currentCharIndex, 'completed');
-            uiManager.setPatternDisplayState('correct'); // Visual feedback for pattern input
+            uiManager.setPatternDisplayState('correct'); // Visual feedback for pattern input - GREEN
 
             const moreChars = gameState.moveToNextCharacter(); // Advances index, handles spaces, clears input state, sets status to LISTENING or FINISHED
 
@@ -345,7 +368,7 @@ document.addEventListener('DOMContentLoaded', () => {
             gameState.registerIncorrectAttempt();
             uiManager.updateCharacterState(gameState.currentCharIndex, 'incorrect'); // Visual feedback (flash red) for char
             audioPlayer.playIncorrectSound();
-            uiManager.setPatternDisplayState('incorrect'); // Visual feedback for pattern input
+            uiManager.setPatternDisplayState('incorrect'); // Visual feedback for pattern input - RED
 
             gameState.status = GameStatus.LISTENING; // Go back to listening for the *same* character
 
@@ -362,6 +385,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     function handleSentenceFinished() {
+        if (!uiManager) return; // Need UI Manager
+
         // Ensure this runs only once per sentence completion
         if (gameState.status === GameStatus.SHOWING_RESULTS || gameState.status === GameStatus.MENU) return;
 
@@ -377,12 +402,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const scores = scoreCalculator.calculateScores(gameState);
 
-        // Update final stats display on the main game UI *before* showing results overlay
-        // This prevents seeing stale stats briefly if the overlay is transparent
-        uiManager.updateTimer(gameState.elapsedTime);
-        // uiManager.updateWpmDisplay(scores.netWpm); // Shown on overlay
-        // uiManager.updateAccuracyDisplay(scores.accuracy); // Shown on overlay
-        // uiManager.updateGrossWpmDisplay(scores.grossWpm); // Shown on overlay
+        // Update final stats display (now only on the results overlay)
+        // uiManager.updateTimer(gameState.elapsedTime); // Handled by showResultsScreen
 
         let unlockedNextLevelId = null;
         let hasNextLevelOption = false;
@@ -413,22 +434,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // SWAPPED: Dah = Next, Dit = Retry
         if (type === 'dah') { // DAH = Next
-            console.log("Results: Dah pressed - Attempting Next");
-            if (gameState.currentMode === AppMode.GAME) {
-                 const next = levelManager.getNextSentence(gameState);
-                 // Check if 'next' exists and is unlocked
-                 if (next && levelManager.isLevelUnlocked(next.levelId)) {
-                     nextLevel(); // Function to start the next sentence/level
-                 } else {
-                     console.log("Results: Next ignored (No next level/sentence available or unlocked).");
-                     // Optional: Add visual feedback like shaking the 'Next' paddle?
-                 }
-             } else { // Sandbox mode has no 'Next' level concept
-                 console.log("Results: Next ignored (Sandbox).");
-             }
+            nextLevel(); // Call the nextLevel function directly
         } else if (type === 'dit') { // DIT = Retry
-            console.log("Results: Dit pressed - Attempting Retry");
-            retryLevel(); // Function to retry the current sentence/level
+            retryLevel(); // Call the retryLevel function directly
         }
     }
 
@@ -440,11 +448,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Only update if actively playing (listening, typing, decoding)
             if (gameState.isPlaying()) {
                 const elapsed = gameState.getCurrentElapsedTime();
-                uiManager.updateTimer(elapsed);
-                // Live WPM/Accuracy calculation can be CPU intensive, update less frequently or disable
-                // const liveStats = scoreCalculator.calculateLiveStats(gameState); // Needs implementation in scoreCalculator
-                // uiManager.updateWpmDisplay(liveStats.netWpm);
-                // uiManager.updateAccuracyDisplay(liveStats.accuracy);
+                if (uiManager) uiManager.updateTimer(elapsed); // Only update timer visually
+                // Live WPM/Accuracy removed for performance/simplicity
             } else if (gameTimerIntervalId) {
                  // If timer is running but game state is no longer 'playing', stop the timer.
                  // This acts as a safeguard against orphaned timers.
@@ -484,6 +489,14 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log(`Sound setting applied: ${isEnabled}`);
     }
 
+    function applyVolumeSetting(level) {
+        const volumeLevel = parseFloat(level);
+        if (!isNaN(volumeLevel) && volumeLevel >= 0 && volumeLevel <= 1) {
+            audioPlayer.setVolume(volumeLevel);
+            console.log(`Volume setting applied: ${volumeLevel.toFixed(2)}`);
+        }
+    }
+
     function applyDarkModeSetting(isEnabled) {
         // Dark mode application is handled by UIManager directly via _applyDarkMode
         console.log(`Dark Mode setting applied: ${isEnabled}`);
@@ -497,9 +510,15 @@ document.addEventListener('DOMContentLoaded', () => {
     /** Ensures modules have the latest settings from UI/Storage, e.g., before starting a game. */
     function applyCurrentSettingsToModules() {
         // Get settings values directly from UIManager (which holds state loaded from storage)
+        // Ensure uiManager exists
+        if (!uiManager) {
+            console.error("Cannot apply current settings: UIManager not found.");
+            return;
+        }
         const currentWpm = uiManager.getInitialWpm();
         const currentFreq = uiManager.getInitialFrequency();
         const soundEnabled = uiManager.getInitialSoundState(); // Needed for audioPlayer check
+        const currentVolume = uiManager.getInitialVolume();
 
         // Ensure InputHandler is initialized
         if (!inputHandler) initializeInputHandler();
@@ -508,6 +527,7 @@ document.addEventListener('DOMContentLoaded', () => {
         applyWpmSetting(currentWpm);
         applyFrequencySetting(currentFreq);
         applySoundSetting(soundEnabled); // Ensure audio player state matches toggle
+        applyVolumeSetting(currentVolume);
 
         // Ensure audio context is ready if sound is enabled
         if (soundEnabled) {
@@ -559,15 +579,28 @@ document.addEventListener('DOMContentLoaded', () => {
         if (confirm("Reset all high scores and level progress? This cannot be undone.")) {
             levelManager.resetProgress();
 
+             // Ensure uiManager exists
+            if (!uiManager) {
+                 console.error("Cannot update UI after progress reset: UIManager not found.");
+                 // Attempt to navigate anyway
+                 handleShowLevelSelect();
+                 alert("Progress reset, but UI update might have failed.");
+                 return;
+             }
+
             // Reload settings in UI Manager (which re-reads localStorage) and apply them
-            uiManager._loadSettings();
+            uiManager._loadSettings(); // This loads defaults including volume
             applyInitialSettings(); // Apply the defaults or reloaded (cleared) settings
 
             // Explicitly update UI elements in settings modal to reflect defaults
              uiManager._updateWpmDisplay(uiManager.getInitialWpm());
              uiManager._updateFrequencyDisplay(uiManager.getInitialFrequency());
+             // Explicitly update volume slider UI and speaker icon
+             uiManager._updateVolumeSliderUI(uiManager.getInitialVolume());
+             uiManager._updateSpeakerIcon(uiManager.getInitialVolume());
              if (uiManager.wpmSlider) uiManager.wpmSlider.value = uiManager.getInitialWpm();
              if (uiManager.frequencySlider) uiManager.frequencySlider.value = uiManager.getInitialFrequency();
+             if (uiManager.volumeSlider) uiManager.volumeSlider.value = uiManager.getInitialVolume(); // Update volume slider value
              if (uiManager.soundToggle) uiManager.soundToggle.checked = uiManager.getInitialSoundState();
              if (uiManager.darkModeToggle) uiManager.darkModeToggle.checked = uiManager.getInitialDarkModeState();
              // Re-apply theme and hint visibility based on potentially reset settings
@@ -588,6 +621,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Playback Mode Logic ---
     function playSentenceFromInput() {
+        if (!uiManager) return; // Need UI Manager
+
         // If already playing back, stop it
         if (gameState.isAudioPlayingBack()) {
             audioPlayer.stopPlayback(); // Handles stopping audio and state update
@@ -613,13 +648,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         audioPlayer.playMorseSequence(morseSequence, () => {
             // --- Playback Completion Callback ---
-            uiManager.setPlaybackButtonEnabled(true, 'Play Morse'); // Re-enable button
+             if (uiManager) uiManager.setPlaybackButtonEnabled(true, 'Play Morse'); // Re-enable button
             // audioPlayer handles setting gameState status back (e.g., to PLAYBACK_INPUT)
             console.log("Playback complete.");
         });
     }
     // --- Sandbox Mode Logic ---
     function updateSandboxPreview() {
+        if (!uiManager) return; // Need UI Manager
         const sentence = uiManager.getSandboxSentence();
         if (sentence && sentence.trim()) {
              // Ensure decoder has current WPM for potential timing hints (though not used in preview)

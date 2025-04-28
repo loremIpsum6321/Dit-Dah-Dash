@@ -1,15 +1,17 @@
+/* Dit-Dah-Dash/css/modal.css */
 /**
  * css/modal.css
  * -------------
  * Styling for the draggable modal window. Ensures theme variables are applied.
+ * Fixes potential text selection during drag.
  */
 
  .modal {
     position: fixed;
-    /* Initial position via transform, updated by JS on drag */
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
+    /* Initial position via JS, NOT transform */
+    /* left: 50%; */
+    /* top: 50%; */
+    /* transform: translate(-50%, -50%); */
     width: 90%;
     max-width: 400px;
     /* Use theme variables for styling */
@@ -36,7 +38,10 @@
     justify-content: space-between;
     align-items: center;
     cursor: move;
-    user-select: none;
+    user-select: none; /* Prevent text selection on header */
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
     transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
@@ -44,6 +49,7 @@
     font-size: 1.2em;
     font-weight: bold;
     color: inherit; /* Inherit from modal */
+    pointer-events: none; /* Prevent title interfering with drag */
 }
 
 .modal-close-button {

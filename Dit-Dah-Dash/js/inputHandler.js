@@ -1,3 +1,4 @@
+/* Dit-Dah-Dash/js/inputHandler.js */
 /* In file: js/inputHandler.js */
 /**
  * js/inputHandler.js
@@ -13,7 +14,9 @@
  * Refined queue processing via onToneEnd callback for better responsiveness.
  * Ensures decode check happens after processing queued input.
  * Improves mobile touch handling to prevent hangs.
- * Adds flag to prevent re-triggering results actions while paddle held.
+ * **v3 Changes:**
+ * - Removed `resultsActionTriggered` flag to fix two-press bug on results screen.
+ * Relies on existing `stateChanged` / `!event.repeat` checks for single action per press.
  */
 
 class InputHandler {
@@ -52,7 +55,7 @@ class InputHandler {
         this.lastInputTypeGenerated = null; // 'dit' or 'dah'
         this.lastEmitTime = 0; // Timestamp of the *start* of the last emitted element (sound)
         this.queuedInput = null; // Single input queue ('dit' or 'dah')
-        this.resultsActionTriggered = false; // Flag to prevent re-triggering results actions
+        // this.resultsActionTriggered = false; // REMOVED
 
         // Track active touch identifiers to prevent multi-touch issues
         this.activeTouchIds = { dit: null, dah: null };
@@ -82,7 +85,7 @@ class InputHandler {
         this.ditDuration = baseDit;
         this.dahDuration = baseDit * MorseConfig.DAH_DURATION_UNITS;
         this.intraCharGap = baseDit * MorseConfig.INTRA_CHARACTER_GAP_UNITS;
-        console.log(`InputHandler sequence timings updated for ${newWpm} WPM: Dit=${this.ditDuration.toFixed(0)}ms, Dah=${this.dahDuration.toFixed(0)}ms, IntraGap=${this.intraCharGap.toFixed(0)}ms`);
+        // console.log(`InputHandler sequence timings updated for ${newWpm} WPM: Dit=${this.ditDuration.toFixed(0)}ms, Dah=${this.dahDuration.toFixed(0)}ms, IntraGap=${this.intraCharGap.toFixed(0)}ms`);
         this.audioPlayer.updateWpm(newWpm); // Keep audio player WPM in sync
         this.decoder.updateWpm(newWpm); // Keep decoder WPM in sync
     }
@@ -129,6 +132,7 @@ class InputHandler {
         let pressStartTimeKey = (type === 'dit') ? 'dit' : 'dah';
 
         // Update internal state based on method and check if it *actually* changed
+        // This `stateChanged` check prevents continuous triggering if button/key is held
         if (type === 'dit') {
             if ((method === 'touch' || method === 'mouse') && !this.ditPressed) { this.ditPressed = true; stateChanged = true; }
             else if (method === 'key' && !this.ditKeyPressed) { this.ditKeyPressed = true; stateChanged = true; }
@@ -144,12 +148,12 @@ class InputHandler {
             this.uiManager.setButtonActive(type, isCurrentlyActive); // Update visual state
 
             if (isResultsContext) {
-                // Results mode: Play sound immediately, trigger callback ONCE per press cycle
-                if (!this.resultsActionTriggered) {
-                     this.audioPlayer.playInputTone(type);
-                     if (this.callbacks.onResultsInput) this.callbacks.onResultsInput(type);
-                     this.resultsActionTriggered = true; // Set flag to prevent re-trigger while held
-                }
+                // Results mode: Play sound and trigger callback on first distinct press
+                console.log(`Results Action Triggered by: ${type}`); // Debug
+                this.audioPlayer.playInputTone(type);
+                if (this.callbacks.onResultsInput) this.callbacks.onResultsInput(type);
+                // No flag needed here anymore
+
             } else if (isGameInputContext) {
                  // Game mode: Cancel any pending decode, process state change (starts iambic/repeat logic)
                  this.decoder.cancelScheduledDecode();
@@ -161,8 +165,11 @@ class InputHandler {
     /** Central handler for release events (touch, mouse, key). */
     _release(type, method) {
         // Determine if the release *might* be relevant
-        const mightBeRelevantContext = (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX || this.gameState.status === GameStatus.SHOWING_RESULTS);
-        if (!mightBeRelevantContext) return;
+        const isGameContext = (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX) &&
+                              (this.gameState.status === GameStatus.READY || this.gameState.isPlaying() || this.gameState.status === GameStatus.DECODING);
+        const isResultsContext = this.gameState.status === GameStatus.SHOWING_RESULTS;
+
+        if (!isGameContext && !isResultsContext) return; // Ignore if not relevant
 
         let stateChanged = false;
 
@@ -181,25 +188,20 @@ class InputHandler {
             const isStillActive = (type === 'dit') ? (this.ditPressed || this.ditKeyPressed) : (this.dahPressed || this.dahKeyPressed);
             this.uiManager.setButtonActive(type, isStillActive);
 
-             // Reset the results action flag only when *neither* paddle is active
-             if (!this.ditPressed && !this.ditKeyPressed && !this.dahPressed && !this.dahKeyPressed) {
-                 this.resultsActionTriggered = false;
-             }
+            // --- Results Flag Reset Removed ---
 
-             const isGameInputContext = (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX) && (this.gameState.status === GameStatus.READY || this.gameState.isPlaying() || this.gameState.status === GameStatus.DECODING);
+            // Process queue *first* if applicable (audio finished while key was held/released)
+            // No longer strictly necessary here as handleToneEnd does it, but harmless as a fallback.
+            if (isGameContext && this.queuedInput !== null && !this.audioPlayer.inputToneNode) {
+                // console.log("Release detected queue processing opportunity."); // Debug
+                this.handleToneEnd(); // Manually trigger queue processing if audio is free
+            }
 
-             // Process queue *first* if applicable (audio finished while key was held/released)
-             // No longer strictly necessary here as handleToneEnd does it, but harmless as a fallback.
-             if (isGameInputContext && this.queuedInput !== null && !this.audioPlayer.inputToneNode) {
-                 // console.log("Release detected queue processing opportunity."); // Debug
-                 this.handleToneEnd(); // Manually trigger queue processing if audio is free
-             }
-
-             // Process the state change caused by the release itself (stops iambic/repeat, schedules decode)
-             if (isGameInputContext) {
-                  this._processInputStateChange();
-             }
-             // If in results context, releasing a button doesn't trigger further action, but resets the flag above.
+            // Process the state change caused by the release itself (stops iambic/repeat, schedules decode)
+            if (isGameContext) {
+                 this._processInputStateChange();
+            }
+            // Releasing a button in results mode no longer needs specific handling here
         }
     }
 
@@ -246,24 +248,28 @@ class InputHandler {
         const isGameContext = (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX) && (this.gameState.status === GameStatus.READY || this.gameState.isPlaying());
         const isResultsContext = this.gameState.status === GameStatus.SHOWING_RESULTS;
 
-        if ((isGameContext || isResultsContext) && (event.key === '.' || event.key === 'e' || event.key === '0' || event.key === '-' || event.key === 'K' || event.key === 'k' || event.key === 'J' || event.key === 'j')) {
+        // Adjusted key checks: Use dedicated keys for Morse, potentially others for results?
+        // Using '.' and 'j' for DIT, '-' and 'k' for DAH consistently.
+        const ditKeys = ['.', 'j', 'J']; // Added 'J'
+        const dahKeys = ['-', 'k', 'K']; // Added 'K'
+
+        if ((isGameContext || isResultsContext) && (ditKeys.includes(event.key) || dahKeys.includes(event.key))) {
             // Prevent default browser actions for these keys in relevant contexts
             event.preventDefault();
 
             // Process press only if it's not a repeat event
             if (!event.repeat) {
-                if (event.key === '.' || event.key === 'j' || event.key === 'J' || event.key === '0') { // Dit
-                    if (!this.ditKeyPressed) { // Check internal flag first
-                         this._press('dit', 'key');
-                    }
-                } else if (event.key === '-' || event.key === 'k' || event.key === 'K') { // Dah
-                    if (!this.dahKeyPressed) { // Check internal flag first
-                         this._press('dah', 'key');
-                    }
+                if (ditKeys.includes(event.key)) { // Dit
+                    // Use _press directly, which handles stateChanged check
+                    this._press('dit', 'key');
+                } else if (dahKeys.includes(event.key)) { // Dah
+                    // Use _press directly, which handles stateChanged check
+                    this._press('dah', 'key');
                 }
             }
         }
     }
+
 
     _handleKeyUp(event) {
         // Check if focus allows processing
@@ -272,18 +278,19 @@ class InputHandler {
              return;
          }
 
+        const ditKeys = ['.', 'j', 'J'];
+        const dahKeys = ['-', 'k', 'K'];
+
         // Process release if the key matches and was previously pressed
-        if (event.key === '.' || event.key === 'j' || event.key === 'J' || event.key === '0') { // Dit release
+        if (ditKeys.includes(event.key)) { // Dit release
              event.preventDefault();
-             if (this.ditKeyPressed) { // Check internal flag
-                 this._release('dit', 'key');
-             }
+             // Use _release directly, which handles stateChanged check
+             this._release('dit', 'key');
          }
-        else if (event.key === '-' || event.key === 'k' || event.key === 'K') { // Dah release
+        else if (dahKeys.includes(event.key)) { // Dah release
              event.preventDefault();
-             if (this.dahKeyPressed) { // Check internal flag
-                 this._release('dah', 'key');
-             }
+             // Use _release directly, which handles stateChanged check
+             this._release('dah', 'key');
          }
     }
 
@@ -333,19 +340,18 @@ class InputHandler {
             // Check if this ended touch matches the one we stored for dit
             if (this.activeTouchIds.dit === endedId) {
                 this.activeTouchIds.dit = null; // Clear the stored ID
-                if (this.ditPressed) { // Check internal flag
-                    this._release('dit', 'touch');
-                }
+                // Use _release directly, which handles stateChanged check
+                this._release('dit', 'touch');
             }
             // Check if this ended touch matches the one we stored for dah
             else if (this.activeTouchIds.dah === endedId) {
                  this.activeTouchIds.dah = null; // Clear the stored ID
-                 if (this.dahPressed) { // Check internal flag
-                     this._release('dah', 'touch');
-                 }
+                 // Use _release directly, which handles stateChanged check
+                 this._release('dah', 'touch');
             }
         }
     }
+
 
     /** Central logic to determine input mode (gameplay/sandbox only) and manage timers/state. */
     _processInputStateChange() {

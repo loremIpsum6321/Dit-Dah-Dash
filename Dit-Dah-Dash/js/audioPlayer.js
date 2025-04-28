@@ -1,14 +1,16 @@
+/* Dit-Dah-Dash/js/audioPlayer.js */
 /* In file: js/audioPlayer.js */
 /**
  * js/audioPlayer.js
  * -----------------
  * Handles audio feedback and Morse sequence playback using the Web Audio API.
- * Allows adjustment of WPM and tone frequency. Plays discrete tones based on timing.
+ * Allows adjustment of WPM, tone frequency, and volume. Plays discrete tones based on timing.
  * Includes fixes for feedback sounds and paddle input cancellation.
  * Correct sound is now disabled.
  * Added callback for when input tones finish playing.
  * Ensures onended callback is reliably called after tone completes naturally.
  * Improves audio context initialization reliability, especially on mobile.
+ * Added master gain node for volume control.
  */
 
 class AudioPlayer {
@@ -18,8 +20,9 @@ class AudioPlayer {
      */
     constructor() {
         this.audioContext = null;
-        this.masterGainNode = null;
-        this.isSoundEnabled = true;
+        this.masterGainNode = null; // For overall volume control
+        this.currentVolume = MorseConfig.AUDIO_DEFAULT_VOLUME;
+        this.isSoundEnabled = true; // Sound toggle state
         this.wpm = MorseConfig.DEFAULT_WPM;
         this.toneFrequency = MorseConfig.AUDIO_DEFAULT_TONE_FREQUENCY;
         this.rampTime = MorseConfig.AUDIO_RAMP_TIME;
@@ -84,12 +87,18 @@ class AudioPlayer {
                 console.log("Attempting to create AudioContext...");
                 this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 this.masterGainNode = this.audioContext.createGain();
-                this.masterGainNode.gain.setValueAtTime(this.isSoundEnabled ? 1 : 0, this.audioContext.currentTime);
+                // Set initial volume based on stored setting or default
+                this.masterGainNode.gain.setValueAtTime(
+                    this.isSoundEnabled ? this.currentVolume : 0,
+                    this.audioContext.currentTime
+                );
                 this.masterGainNode.connect(this.audioContext.destination);
                 this.audioContext.onstatechange = () => {
                      console.log("AudioContext state changed:", this.audioContext.state);
                      // Update initialized flag based on state change
                      this.isInitialized = this.audioContext.state === 'running';
+                     // Re-apply volume if state becomes running after being suspended/closed
+                     if (this.isInitialized) this.setVolume(this.currentVolume);
                 };
                 console.log("AudioContext created, state:", this.audioContext.state);
             } catch (e) {
@@ -107,6 +116,7 @@ class AudioPlayer {
                 .then(() => {
                     console.log("AudioContext resumed successfully.");
                     this.isInitialized = true; // Mark as initialized on successful resume
+                    this.setVolume(this.currentVolume); // Re-apply volume after resume
                 })
                 .catch(err => {
                     console.error("AudioContext resume failed:", err);
@@ -154,27 +164,48 @@ class AudioPlayer {
         }
     }
 
+    /**
+     * Sets the master volume level.
+     * @param {number} level - Volume level from 0.0 (silent) to 1.0 (full).
+     */
+    setVolume(level) {
+        const newVolume = Math.max(0, Math.min(1, level)); // Clamp between 0 and 1
+        this.currentVolume = newVolume;
+        console.log(`Setting volume to: ${(newVolume * 100).toFixed(0)}%`);
+
+        if (this.masterGainNode && this.audioContext && this.audioContext.state === 'running') {
+            try {
+                const targetGain = this.isSoundEnabled ? this.currentVolume : 0;
+                this.masterGainNode.gain.cancelScheduledValues(this.audioContext.currentTime);
+                // Use linearRampToValueAtTime for smoother volume changes
+                this.masterGainNode.gain.linearRampToValueAtTime(
+                    targetGain,
+                    this.audioContext.currentTime + this.rampTime * 2 // Short ramp time
+                );
+            } catch (e) {
+                console.warn("Could not set master gain - AudioContext likely closed or not ready:", e);
+            }
+        }
+    }
 
     /**
-     * Enables or disables sound output globally.
-     * @param {boolean} enabled - True to enable sound, false to disable.
+     * Enables or disables sound output globally (mutes/unmutes).
+     * Does not change the underlying volume level.
+     * @param {boolean} enabled - True to enable sound, false to disable/mute.
      */
     setSoundEnabled(enabled) {
+        if (this.isSoundEnabled === enabled) return; // No change
+
         this.isSoundEnabled = enabled;
+        console.log(`Sound ${enabled ? 'enabled' : 'disabled'}`);
         // Attempt to initialize context if enabling sound and not yet initialized
         if (enabled && !this.isInitialized) {
             this.initializeAudioContext();
         }
 
-        if (this.masterGainNode && this.audioContext) {
-             // Use try-catch as context might be closed
-             try {
-                this.masterGainNode.gain.cancelScheduledValues(this.audioContext.currentTime);
-                this.masterGainNode.gain.linearRampToValueAtTime(this.isSoundEnabled ? 1 : 0, this.audioContext.currentTime + this.rampTime * 2);
-             } catch (e) {
-                 console.warn("Could not set master gain - AudioContext likely closed or not ready:", e);
-             }
-        }
+        // Apply mute/unmute using the current volume level
+        this.setVolume(this.currentVolume); // This will set gain to 0 if !isSoundEnabled
+
         if (!enabled) {
             this.stopPlayback();
             this.stopInputTone(); // Stop input tone if sound disabled
@@ -191,7 +222,7 @@ class AudioPlayer {
     playInputTone(type) {
         // Ensure context is initialized and ready FIRST. Crucial for mobile.
         if (!this.isSoundEnabled || !this.initializeAudioContext()) {
-            console.warn(`playInputTone (${type}) skipped: Sound disabled or AudioContext not ready.`);
+            // Silently fail if sound disabled or context not ready, don't log warning spam
             return false;
         }
 
@@ -290,7 +321,7 @@ class AudioPlayer {
 
     /**
      * Internal helper to schedule a single oscillator tone.
-     * Assumes audio context is valid and running.
+     * Assumes audio context is valid and running. Connects to masterGainNode.
      * @param {number} startTime - The audioContext time when the tone should start.
      * @param {number} duration - The duration of the tone in seconds.
      * @param {number} frequency - The frequency of the tone in Hz.
@@ -300,46 +331,55 @@ class AudioPlayer {
      * @private
      */
     _scheduleTone(startTime, duration, frequency, isSequencePlayback, type = null) {
-        // Removed context/gain check - assumed valid by calling functions (playInputTone, playMorseSequence)
+        // Ensure context and master gain are ready
+        if (!this.initializeAudioContext() || !this.masterGainNode) {
+            console.warn("_scheduleTone skipped: AudioContext or Master Gain Node not ready.");
+            return null;
+        }
         if (duration <= 0) {
              console.warn(`_scheduleTone skipped: duration invalid (${duration})`);
              return null;
         }
+
         try {
             const osc = this.audioContext.createOscillator();
-            const gain = this.audioContext.createGain();
+            const gain = this.audioContext.createGain(); // Individual gain for ramp
             osc.connect(gain);
-            gain.connect(this.masterGainNode); // Connect to master gain
+            gain.connect(this.masterGainNode); // Connect individual gain to MASTER gain
 
             osc.type = 'sine';
             osc.frequency.setValueAtTime(frequency, startTime);
 
-            // Gain scheduling (ramp up, hold, ramp down)
+            // Gain scheduling (ramp up, hold, ramp down) for the *individual* gain node
+            const INDIVIDUAL_GAIN = 0.9; // Don't use full 1.0 to avoid clipping if master is 1.0
             gain.gain.setValueAtTime(0, startTime);
-            gain.gain.linearRampToValueAtTime(1, startTime + this.rampTime);
+            gain.gain.linearRampToValueAtTime(INDIVIDUAL_GAIN, startTime + this.rampTime);
             // Ensure hold phase exists if duration is longer than ramp times
             if (duration > this.rampTime * 2) {
-                 gain.gain.setValueAtTime(1, startTime + duration - this.rampTime);
+                 gain.gain.setValueAtTime(INDIVIDUAL_GAIN, startTime + duration - this.rampTime);
             }
             gain.gain.linearRampToValueAtTime(0, startTime + duration);
 
             osc.start(startTime);
             // Calculate stop time slightly after gain ramp completes
-            const stopTime = startTime + duration + this.rampTime;
+            const stopTime = startTime + duration + this.rampTime; // Add small buffer
             osc.stop(stopTime);
 
              const nodeRef = { osc, gain, type };
 
              // Default onended cleanup - will be overridden by playInputTone if needed
-             // This basic cleanup handles sequence playback nodes
+             // This basic cleanup handles sequence playback nodes and feedback sounds
              osc.onended = () => {
                  if (isSequencePlayback) {
                     this.playbackNodes = this.playbackNodes.filter(n => n.osc !== osc);
+                 } else if (this.feedbackNodes.some(n => n.osc === osc)) {
+                    this.feedbackNodes = this.feedbackNodes.filter(n => n.osc !== osc);
                  }
+                 // Disconnect nodes after they finish
                  try {
-                    osc.disconnect();
-                    gain.disconnect();
-                 } catch(e){ /* Ignore */ }
+                    if(osc) osc.disconnect();
+                    if(gain) gain.disconnect();
+                 } catch(e){ /* Ignore if already disconnected */ }
              };
 
              if (isSequencePlayback) {
@@ -350,7 +390,8 @@ class AudioPlayer {
         } catch (error) {
             console.error("AudioPlayer: Error scheduling tone:", error);
             // Attempt cleanup on error
-            try { osc?.disconnect(); gain?.disconnect(); } catch(e){}
+            let tempOsc = osc, tempGain = gain; // Avoid closure issues if vars assigned above error
+            try { tempOsc?.disconnect(); tempGain?.disconnect(); } catch(e){}
             return null;
         }
     }
@@ -530,7 +571,7 @@ class AudioPlayer {
     playIncorrectSound() {
         // Ensure context is initialized and ready
         if (!this.isSoundEnabled || !this.initializeAudioContext()) {
-             console.warn("playIncorrectSound skipped: Sound disabled or context not ready.");
+             // console.warn("playIncorrectSound skipped: Sound disabled or context not ready.");
             return;
         }
         // Check if other critical sounds are playing
@@ -549,7 +590,11 @@ class AudioPlayer {
      * @private
      */
     _playFeedbackSound(frequency, durationSeconds) {
-        // Removed context/gain check - assumed valid by calling function (playIncorrectSound)
+        // Ensure context and master gain are ready
+        if (!this.initializeAudioContext() || !this.masterGainNode) {
+            console.warn("_playFeedbackSound skipped: AudioContext or Master Gain Node not ready.");
+            return;
+        }
         if (frequency <= 0) return;
 
         this.stopFeedbackSounds(); // Stop existing feedback first
@@ -557,11 +602,12 @@ class AudioPlayer {
         try {
             const now = this.audioContext.currentTime;
             const osc = this.audioContext.createOscillator();
-            const gain = this.audioContext.createGain();
+            const gain = this.audioContext.createGain(); // Individual gain for ramp
             osc.type = 'triangle';
             osc.frequency.setValueAtTime(frequency, now);
 
             const feedbackGainLevel = 0.5; // Lower volume for feedback
+            // Apply ramp to *individual* gain node
             gain.gain.setValueAtTime(0, now);
             gain.gain.linearRampToValueAtTime(feedbackGainLevel, now + this.rampTime);
             if (durationSeconds > this.rampTime * 2) {
@@ -570,24 +616,23 @@ class AudioPlayer {
             gain.gain.linearRampToValueAtTime(0, now + durationSeconds);
 
             osc.connect(gain);
-            gain.connect(this.masterGainNode); // Connect to master gain
+            gain.connect(this.masterGainNode); // Connect individual gain to MASTER gain
 
             osc.start(now);
-            osc.stop(now + durationSeconds + this.rampTime + 0.01);
+            const stopTime = now + durationSeconds + this.rampTime + 0.01; // Add buffer
+            osc.stop(stopTime);
 
             const nodeRef = { osc, gain };
             this.feedbackNodes.push(nodeRef);
 
-            osc.onended = () => {
-                this.feedbackNodes = this.feedbackNodes.filter(n => n.osc !== osc);
-                try {
-                    osc.disconnect();
-                    gain.disconnect();
-                 } catch(e){}
-            };
+            // Use default onended handler attached by _scheduleTone/helper (which handles feedbackNodes filtering and disconnect)
+            // No need to define onended specifically here anymore.
+
         } catch (error) {
             console.error("Error playing feedback sound:", error);
-            try { osc?.disconnect(); gain?.disconnect(); } catch(e){}
+            let tempOsc = osc, tempGain = gain; // Avoid closure issues
+            try { tempOsc?.disconnect(); tempGain?.disconnect(); } catch(e){}
+            this.feedbackNodes = []; // Clear feedback nodes on error
         }
     }
 }

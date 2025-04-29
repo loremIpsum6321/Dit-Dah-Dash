@@ -12,11 +12,16 @@
  * Adds Hint Peeking functionality using Control key.
  * **v2 Changes:**
  * - Correct feedback now applies to both user and target pattern containers.
+ * **v3 Changes:**
+ * - Added drag and drop functionality for paddle textures.
+ * - Stores texture URLs in localStorage.
+ * - Loads textures on initialization.
  */
 
 class UIManager {
     /**
      * Initializes the UIManager by getting references to key DOM elements.
+     * Loads textures and binds drag/drop events.
      */
     constructor() {
         // Core Containers / Wrappers
@@ -127,8 +132,13 @@ class UIManager {
         this.ditSvgString = `<svg class="pattern-dit" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg"><circle cx="25" cy="25" r="15" /></svg>`;
         this.dahSvgString = `<svg class="pattern-dah" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="20" width="30" height="10" rx="3"/></svg>`;
 
+        // Paddle Texture URLs (loaded from localStorage)
+        this.paddleTextures = { dit: null, dah: null };
+
+
         // Initial Setup
         this._loadSettings();
+        this._loadPaddleTextures(); // Load textures after settings
         this._updateWpmDisplay(this.currentWpm);
         this._updateFrequencyDisplay(this.currentFrequency);
         this._updateVolumeSliderUI(this.currentVolume); // Update volume UI
@@ -150,6 +160,7 @@ class UIManager {
             this.volumeSlider.value = this.currentVolume;
         }
         this._addGlobalEventListeners(); // Add global listeners for hint peek
+        this._addDragDropListeners(); // Add drag and drop listeners for paddles
     }
 
     // --- UI View Management ---
@@ -721,6 +732,193 @@ class UIManager {
         this.volumeSlider?.addEventListener('touchend', () => this.volumeSlider.blur());
     }
 
+    // --- Paddle Texture Drag and Drop ---
+
+    /**
+     * Loads paddle textures from localStorage and applies them.
+     * @private
+     */
+    _loadPaddleTextures() {
+        try {
+            const savedTextures = localStorage.getItem(MorseConfig.STORAGE_KEY_PADDLE_TEXTURES);
+            if (savedTextures) {
+                const parsedTextures = JSON.parse(savedTextures);
+                if (parsedTextures.dit) {
+                    this._applyTexture(this.ditButton, parsedTextures.dit);
+                    this.paddleTextures.dit = parsedTextures.dit;
+                }
+                if (parsedTextures.dah) {
+                    this._applyTexture(this.dahButton, parsedTextures.dah);
+                    this.paddleTextures.dah = parsedTextures.dah;
+                }
+                console.log("Paddle textures loaded:", this.paddleTextures);
+            }
+        } catch (e) {
+            console.error("Error loading paddle textures:", e);
+            this.paddleTextures = { dit: null, dah: null };
+        }
+    }
+
+    /**
+     * Saves the current paddle texture URLs to localStorage.
+     * @private
+     */
+    _savePaddleTextures() {
+        try {
+            localStorage.setItem(MorseConfig.STORAGE_KEY_PADDLE_TEXTURES, JSON.stringify(this.paddleTextures));
+            console.log("Paddle textures saved:", this.paddleTextures);
+        } catch (e) {
+            console.error("Error saving paddle textures:", e);
+        }
+    }
+
+    /**
+     * Binds drag and drop event listeners to paddle elements.
+     * @private
+     */
+    _addDragDropListeners() {
+        [this.ditButton, this.dahButton].forEach(paddle => {
+            if (paddle) {
+                paddle.addEventListener('dragover', this._handleDragOver.bind(this));
+                paddle.addEventListener('dragleave', this._handleDragLeave.bind(this));
+                paddle.addEventListener('drop', this._handleDrop.bind(this));
+            }
+        });
+    }
+
+    /**
+     * Handles the dragover event on a paddle.
+     * Prevents default behavior and adds a visual indicator.
+     * @param {DragEvent} event - The dragover event.
+     * @private
+     */
+    _handleDragOver(event) {
+        event.preventDefault(); // Necessary to allow drop
+        event.stopPropagation();
+        const paddle = event.currentTarget;
+        if (paddle) {
+            paddle.classList.add('drag-over');
+            event.dataTransfer.dropEffect = 'copy'; // Indicate a copy operation
+        }
+    }
+
+    /**
+     * Handles the dragleave event on a paddle.
+     * Removes the visual indicator.
+     * @param {DragEvent} event - The dragleave event.
+     * @private
+     */
+    _handleDragLeave(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        const paddle = event.currentTarget;
+        if (paddle) {
+            paddle.classList.remove('drag-over');
+        }
+    }
+
+    /**
+     * Handles the drop event on a paddle.
+     * Extracts image data (URL or file) and applies it as a texture.
+     * @param {DragEvent} event - The drop event.
+     * @private
+     */
+    _handleDrop(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        const paddle = event.currentTarget;
+        if (!paddle) return;
+
+        paddle.classList.remove('drag-over');
+        const paddleType = paddle.dataset.paddleType; // 'dit' or 'dah'
+
+        if (!paddleType) {
+             console.error("Drop target paddle has no data-paddle-type attribute.");
+             return;
+        }
+
+        const dt = event.dataTransfer;
+        const files = dt.files;
+
+        if (files && files.length > 0) {
+            // --- Handle File Drop ---
+            const file = files[0];
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const imageDataUrl = e.target.result;
+                    this._applyTexture(paddle, imageDataUrl);
+                    this.paddleTextures[paddleType] = imageDataUrl;
+                    this._savePaddleTextures();
+                };
+                reader.readAsDataURL(file);
+                console.log(`Applying file texture to ${paddleType} paddle: ${file.name}`);
+            } else {
+                console.warn("Dropped file is not an image.");
+                alert("Please drop an image file.");
+            }
+        } else {
+            // --- Handle URL/Other Data Drop ---
+            let imageUrl = dt.getData('text/uri-list') || dt.getData('URL');
+            if (!imageUrl) {
+                // Try to extract image source if HTML was dropped
+                 const htmlData = dt.getData('text/html');
+                 if (htmlData) {
+                     const tempDiv = document.createElement('div');
+                     tempDiv.innerHTML = htmlData;
+                     const imgElement = tempDiv.querySelector('img');
+                     if (imgElement) {
+                         imageUrl = imgElement.src;
+                     }
+                 }
+            }
+
+
+            if (imageUrl && (imageUrl.startsWith('http') || imageUrl.startsWith('data:image'))) {
+                // Basic validation: starts with http or is data URI
+                this._applyTexture(paddle, imageUrl);
+                this.paddleTextures[paddleType] = imageUrl;
+                this._savePaddleTextures();
+                console.log(`Applying URL texture to ${paddleType} paddle: ${imageUrl}`);
+            } else {
+                 console.warn("Dropped item is not a valid image URL or file.");
+                 alert("Could not get a valid image URL from the dropped item.");
+            }
+        }
+    }
+
+    /**
+     * Applies an image URL as a background texture to a paddle element.
+     * @param {HTMLElement} paddleElement - The button element (ditButton or dahButton).
+     * @param {string} imageUrl - The URL of the image (http/https or data URI).
+     * @private
+     */
+    _applyTexture(paddleElement, imageUrl) {
+        if (!paddleElement) return;
+        paddleElement.style.backgroundImage = `url('${imageUrl}')`;
+        paddleElement.classList.add('has-texture');
+        console.log("Texture applied to:", paddleElement.id);
+    }
+
+    /**
+     * Removes the background texture from a paddle element.
+     * @param {HTMLElement} paddleElement - The button element.
+     * @private
+     */
+    _removeTexture(paddleElement) {
+         if (!paddleElement) return;
+         paddleElement.style.backgroundImage = 'none';
+         paddleElement.classList.remove('has-texture');
+         const paddleType = paddleElement.dataset.paddleType;
+         if (paddleType) {
+            this.paddleTextures[paddleType] = null;
+            this._savePaddleTextures();
+         }
+        console.log("Texture removed from:", paddleElement.id);
+    }
+
+    // --- End Paddle Texture Drag and Drop ---
+
 
     addEventListeners(callbacks) {
         this.callbacks = callbacks; // Store callbacks for hint peek logic
@@ -817,5 +1015,9 @@ class UIManager {
     getSandboxSentence() { return this.sandboxInput ? this.sandboxInput.value : ""; }
 }
 
-// Create global instance
+// Update config.js to include the new storage key
+// Add this line within the window.MorseConfig object in config.js:
+// STORAGE_KEY_PADDLE_TEXTURES: `${STORAGE_KEY_PREFIX}paddleTextures`,
+
+// Create global instance (assuming config.js runs first now)
 window.morseUIManager = new UIManager();

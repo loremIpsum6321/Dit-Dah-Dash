@@ -15,6 +15,10 @@
  * - Added flex centering to .morse-button.
  * - Increased #dah-button .paddle-svg height slightly.
  * - Added .correct-pattern styles for both pattern containers.
+ * **v3 Changes:**
+ * - Added styles for drag-over effect on paddles.
+ * - Added styles for applying background texture to paddles.
+ * - Removed background-color tint and blend-mode when texture is applied.
  */
 
 /* --- Global Styles & Resets --- */
@@ -88,6 +92,8 @@
     --volume-slider-thumb-bg: #555;
     --volume-slider-thumb-border: 2px solid var(--container-bg);
     --speaker-icon-color: var(--hint-toggle-color);
+    --paddle-drag-over-border: 3px dashed var(--button-primary-hover-bg);
+    /* --paddle-texture-opacity: 0.5; /* Opacity for the texture layer - REMOVED */
 }
 
 .dark-mode {
@@ -158,6 +164,8 @@
     --volume-slider-thumb-bg: #bbb;
     --volume-slider-thumb-border: 2px solid var(--container-bg);
     --speaker-icon-color: var(--hint-toggle-color);
+    --paddle-drag-over-border: 3px dashed var(--button-primary-hover-bg);
+    /* --paddle-texture-opacity: 0.4; /* Slightly lower opacity for dark mode - REMOVED */
 }
 
 
@@ -186,7 +194,7 @@ html, body {
 }
 
 #top-spacer {
-    height: 190px; /* Approximate height of patterns + volume + margins */
+    height: 70px; /* Approximate height of patterns + volume + margins */
     flex-shrink: 0; /* Prevent it from shrinking */
     width: 100%;   /* Take full width */
     /* background-color: rgba(255, 0, 0, 0.1); /* Optional: for debugging layout */
@@ -227,7 +235,7 @@ html, body {
 .morse-button {
     flex-grow: 1; flex-basis: 45%; max-width: 48%; font-weight: bold; border: none;
     border-radius: 15px; cursor: pointer; color: var(--button-text-color); box-shadow: var(--button-shadow);
-    transition: background-color 0.1s ease, transform 0.05s ease, box-shadow 0.1s ease;
+    transition: background-color 0.1s ease, transform 0.05s ease, box-shadow 0.1s ease, border 0.2s ease, background-image 0.2s ease; /* Added background-image transition */
     /* Flexbox centering for content (SVG + Label) */
     display: flex;
     flex-direction: column;
@@ -236,7 +244,34 @@ html, body {
     user-select: none;
     -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none;
     height: 100%; padding: 10px; overflow: hidden; position: relative; /* For absolute positioning label if needed */
+
+    /* Texture Properties */
+    background-size: cover;       /* Cover the entire button */
+    background-position: center;  /* Center the image */
+    background-repeat: no-repeat; /* Don't repeat the image */
 }
+
+/* Drag-over indication */
+.morse-button.drag-over {
+    border: var(--paddle-drag-over-border);
+    filter: brightness(1.1); /* Slightly lighten */
+}
+
+/* Style when texture is applied */
+/* .morse-button.has-texture { */
+    /* background-blend-mode: overlay; /* REMOVED */
+    /* background-color: rgba(var(--button-dit-bg-rgb, 33, 150, 243), 0.7); /* REMOVED */
+/* } */
+/* #dit-button.has-texture { background-color: rgba(var(--button-dit-bg-rgb, 33, 150, 243), 0.7); } /* REMOVED */
+/* #dah-button.has-texture { background-color: rgba(var(--button-dah-bg-rgb, 255, 152, 0), 0.7); } /* REMOVED */
+
+/* Ensure SVG/Label are visible over texture */
+.morse-button .paddle-svg,
+.morse-button .paddle-label {
+    position: relative; /* Ensure they are above the background */
+    z-index: 1;
+}
+
 /* Hide SVG by default when results label is active */
 .morse-button.results-label-active .paddle-svg {
     display: none;
@@ -274,8 +309,10 @@ html, body {
     color: var(--paddle-label-results-color); /* Distinct color for results */
     font-size: 1.8em; /* Even larger */
 }
+/* Base Background Colors (used when NO texture applied) */
 #dit-button { background-color: var(--button-dit-bg); }
 #dah-button { background-color: var(--button-dah-bg); }
+
 .morse-button:active, .morse-button.active { transform: scale(0.97); box-shadow: var(--button-active-shadow); filter: brightness(0.9); }
 .morse-button:disabled {
     filter: grayscale(60%);
@@ -592,10 +629,10 @@ html, body {
 .hidden { display: none !important; }
 
 /* --- Responsive Adjustments --- */
-@media screen and (orientation: landscape) and (max-height: 550px) {
+@media screen and (orientation: landscape) and (max-height: 500px) {
     #top-spacer { display: none;}
     #display-area { height: 58%; padding: 5px 10px; }
-    #input-area { height: 42%; padding: 10px; gap: 10px; }
+    #input-area { height: 48%; padding: 10px; gap: 10px; }
     #text-display-wrapper { max-width: 95%; margin: 3px auto; padding: 5px 0; line-height: 1.2; min-height: 60px; }
     #target-pattern-outer-wrapper, #user-pattern-container { width: 90%; max-width: 400px; margin: 4px auto; } /* Adjust landscape max width */
     .pattern-container { min-height: 40px; padding: 3px 8px; gap: 3px; } /* Adjust landscape height/padding */
@@ -605,7 +642,7 @@ html, body {
     #stats-display > div { padding: 3px 6px; }
     .hint-toggle svg { width: 1.2em; height: 1.2em; }
     .hint-toggle { right: 2px; padding: 0 2px; }
-    .morse-button .paddle-svg { min-height: 20px; margin-bottom: 3px; }
+    .morse-button .paddle-svg { min-height: 10px; margin-bottom: 3px; }
     .paddle-label { font-size: 0.8em; margin-top: 2px; }
     .morse-button.results-label-active .paddle-label { font-size: 1.5em; }
     .menu-nav-button { font-size: 1.0em; padding: 4px 8px; top: 5px; left: 5px; }
@@ -614,18 +651,19 @@ html, body {
     #results-stats p { font-size: 1em; margin-bottom: 3px;}
     #results-screen .results-instructions { font-size: 0.9em; }
     /* Volume Landscape */
-    #volume-control-area { width: 50%; max-width: 280px; gap: 8px; margin: 3px auto 5px auto; }
+    /* #volume-control-area { width: 50%; max-width: 280px; gap: 8px; margin: 3px auto 5px auto; }
     #volume-slider { height: 8px; }
     #volume-slider::-webkit-slider-thumb, #volume-slider::-moz-range-thumb, #volume-slider::-ms-thumb { width: 16px; height: 16px; margin-top: -4px; }
-    #speaker-icon { width: 26px; height: 26px; }
+    #speaker-icon { width: 26px; height: 26px; } */
+    #volume-slider {display: none; } /* Hide volume slider in landscape */
+    #speaker-icon { display: none; } /* Hide speaker icon in landscape */
+    .menu-nav-button { display: none; }
 }
-
 /* Very Small Screens (e.g., small phones) */
 @media (max-width: 360px) {
-    #top-spacer { display: none;}
+    #top-spacer { display: none; }
     #stats-display { font-size: 1.1em; }
     #text-display { font-size: 3.5em; } /* Slightly smaller on tiny screens */
-    .overlay button:not(.menu-nav-button) { font-size: 1.1em; padding: 10px 18px; }
     #level-list button { font-size: 1.1em; padding: 10px 12px; }
     .morse-button.results-label-active .paddle-label { font-size: 1.6em; }
     #target-pattern-outer-wrapper, #user-pattern-container { width: 95%; max-width: none; } /* Take more width, remove max */
@@ -637,4 +675,7 @@ html, body {
     #volume-slider { height: 8px; }
     #volume-slider::-webkit-slider-thumb, #volume-slider::-moz-range-thumb, #volume-slider::-ms-thumb { width: 16px; height: 16px; margin-top: -4px; }
     #speaker-icon { width: 28px; height: 28px; }
+
+    /* Hide game menu button */
+    .menu-nav-button { display: none; }
 }

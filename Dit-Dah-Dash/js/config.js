@@ -4,6 +4,7 @@
  * --------------
  * Global configuration settings for the Dit-Dah-Dash game.
  * Includes Morse code mappings, level data, timing defaults, audio defaults, storage keys, and UI settings.
+ * Removed hardcoded default keybindings; these will be managed dynamically via settings.
  */
 
 // --- Morse Code Mapping ---
@@ -30,8 +31,8 @@ const DAH_DURATION_UNITS = 3;
 const INTRA_CHARACTER_GAP_UNITS = 1;
 const INTER_CHARACTER_GAP_UNITS = 3;
 const WORD_GAP_UNITS = 7;
-const INTRA_CHAR_GAP_MULTIPLIER = 0.8;
-const CHARACTER_INPUT_TIMEOUT_MULTIPLIER = 0.8;
+const INTRA_CHAR_GAP_MULTIPLIER = 0.8; // Affects how long decoder waits
+const CHARACTER_INPUT_TIMEOUT_MULTIPLIER = 0.8; // Affects how long decoder waits
 
 // --- Level Data ---
 const LEVELS_DATA = [
@@ -298,9 +299,6 @@ const LEVELS_DATA = [
     }
 ];
 
-// You can now use this LEVELS_DATA array in your JavaScript application.
-// console.log(JSON.stringify(LEVELS_DATA, null, 2)); // Optional: Print formatted JSON
-
 // --- Audio Configuration ---
 const AUDIO_DEFAULT_TONE_FREQUENCY = 400; // Default frequency in Hz
 const AUDIO_RAMP_TIME = 0.005; // Fade in/out time for tones (seconds)
@@ -311,12 +309,25 @@ const AUDIO_DEFAULT_VOLUME = 1.0; // Default volume (0.0 to 1.0)
 // --- Scoring ---
 const INCORRECT_ATTEMPT_PENALTY = 0.1;
 
-// --- Default Keybindings ---
-// Note: Keybinding customization is not implemented in this version
-const DEFAULT_DIT_KEY = '.';
-const DEFAULT_DAH_KEY = '-';
-const FALLBACK_DIT_KEY = 'e';
-const FALLBACK_DAH_KEY = 't';
+// --- Keybindings ---
+// Default keys if not found in localStorage or on reset
+const KEYBINDING_DEFAULTS = {
+    dit: '.',
+    dah: '-'
+};
+
+// Key display mapping for settings UI
+const KEYBIND_DISPLAY_MAP = {
+    ' ': 'Space', '.': '.', '-': '-', 'Enter': 'Enter', 'Shift': 'Shift',
+    'Control': 'Ctrl', 'Alt': 'Alt', 'Meta': 'Cmd/Win',
+    'ArrowUp': '↑', 'ArrowDown': '↓', 'ArrowLeft': '←', 'ArrowRight': '→',
+    // Add more mappings as needed
+};
+// Function to get displayable key name
+const getKeyDisplay = (key) => {
+    if (!key) return '';
+    return KEYBIND_DISPLAY_MAP[key] || key.toUpperCase();
+};
 
 
 // --- Local Storage Keys ---
@@ -327,18 +338,15 @@ const STORAGE_KEY_SETTINGS_WPM = `${STORAGE_KEY_PREFIX}settingsWpm`;
 const STORAGE_KEY_SETTINGS_SOUND = `${STORAGE_KEY_PREFIX}settingsSound`;
 const STORAGE_KEY_SETTINGS_DARK_MODE = `${STORAGE_KEY_PREFIX}settingsDarkMode`;
 const STORAGE_KEY_SETTINGS_FREQUENCY = `${STORAGE_KEY_PREFIX}settingsFrequency`;
-const STORAGE_KEY_SETTINGS_VOLUME = `${STORAGE_KEY_PREFIX}settingsVolume`; // New volume key
-const STORAGE_KEY_SETTINGS_DIT_KEY = `${STORAGE_KEY_PREFIX}settingsDitKey`; // Not currently used for customization
-const STORAGE_KEY_SETTINGS_DAH_KEY = `${STORAGE_KEY_PREFIX}settingsDahKey`; // Not currently used for customization
-const STORAGE_KEY_SETTINGS_HINT_VISIBLE = `${STORAGE_KEY_PREFIX}settingsHintVisible`; // Used for hint toggle
+const STORAGE_KEY_SETTINGS_VOLUME = `${STORAGE_KEY_PREFIX}settingsVolume`;
+const STORAGE_KEY_SETTINGS_DIT_KEY = `${STORAGE_KEY_PREFIX}settingsDitKey`; // New key for Dit binding
+const STORAGE_KEY_SETTINGS_DAH_KEY = `${STORAGE_KEY_PREFIX}settingsDahKey`; // New key for Dah binding
+const STORAGE_KEY_SETTINGS_HINT_VISIBLE = `${STORAGE_KEY_PREFIX}settingsHintVisible`;
+const STORAGE_KEY_PADDLE_TEXTURES = `${STORAGE_KEY_PREFIX}paddleTextures`;
+
 
 // --- UI ---
 const INCORRECT_FLASH_DURATION = 300; // ms for incorrect feedback flash
-const KEYBIND_DISPLAY_MAP = { // Not currently used
-    ' ': 'Space', '.': '.', '-': '-', 'Enter': 'Enter', 'Shift': 'Shift',
-    'Control': 'Ctrl', 'Alt': 'Alt', 'Meta': 'Cmd/Win',
-    'ArrowUp': '↑', 'ArrowDown': '↓', 'ArrowLeft': '←', 'ArrowRight': '→',
-};
 const HINT_DEFAULT_VISIBLE = true; // Hint is visible by default for new users
 
 // --- Make config globally accessible ---
@@ -364,19 +372,38 @@ window.MorseConfig = {
     // Scoring
     INCORRECT_ATTEMPT_PENALTY,
 
-    // Keybindings (Defaults only)
-    DEFAULT_DIT_KEY, DEFAULT_DAH_KEY,
-    FALLBACK_DIT_KEY, FALLBACK_DAH_KEY,
+    // Keybindings
+    KEYBINDING_DEFAULTS,
+    KEYBIND_DISPLAY_MAP,
+    getKeyDisplay,
 
     // Storage Keys
+    STORAGE_KEY_PREFIX, // Export prefix for potential other uses
     STORAGE_KEY_HIGH_SCORES, STORAGE_KEY_UNLOCKED_LEVELS,
     STORAGE_KEY_SETTINGS_WPM, STORAGE_KEY_SETTINGS_SOUND,
     STORAGE_KEY_SETTINGS_DARK_MODE, STORAGE_KEY_SETTINGS_FREQUENCY,
     STORAGE_KEY_SETTINGS_VOLUME,
     STORAGE_KEY_SETTINGS_DIT_KEY, STORAGE_KEY_SETTINGS_DAH_KEY,
     STORAGE_KEY_SETTINGS_HINT_VISIBLE,
+    STORAGE_KEY_PADDLE_TEXTURES,
 
     // UI Feedback & Defaults
-    INCORRECT_FLASH_DURATION, KEYBIND_DISPLAY_MAP,
+    INCORRECT_FLASH_DURATION,
     HINT_DEFAULT_VISIBLE,
+};
+
+// Function to get the current keybindings, checking localStorage or using defaults
+window.getCurrentKeybindings = () => {
+    let ditKey = localStorage.getItem(window.MorseConfig.STORAGE_KEY_SETTINGS_DIT_KEY);
+    let dahKey = localStorage.getItem(window.MorseConfig.STORAGE_KEY_SETTINGS_DAH_KEY);
+
+    // Use defaults if localStorage values are null, empty, or invalid (e.g., space)
+    if (!ditKey || ditKey.trim() === '') {
+        ditKey = window.MorseConfig.KEYBINDING_DEFAULTS.dit;
+    }
+    if (!dahKey || dahKey.trim() === '') {
+        dahKey = window.MorseConfig.KEYBINDING_DEFAULTS.dah;
+    }
+
+    return { dit: ditKey, dah: dahKey };
 };

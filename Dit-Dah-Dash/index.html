@@ -18,8 +18,7 @@
 
             <div id="game-ui-wrapper" class="hidden">
                  <button id="game-menu-button" class="menu-nav-button" title="Main Menu">☰ Menu</button>
-                 <div id="top-spacer"></div>
-                 <div id="text-display-wrapper">
+                 <div id="top-spacer"></div> <div id="text-display-wrapper">
                     <div id="text-display">
                         </div>
                  </div>
@@ -57,8 +56,9 @@
                         </svg>
                     </div>
                  </div>
+            </div>
 
-            </div> <div id="playback-area" class="hidden">
+            <div id="playback-area" class="hidden">
                  <button id="playback-menu-button" class="menu-nav-button" title="Main Menu">☰ Menu</button>
                  <h2>Sentence Playback</h2>
                  <label for="playback-input">Enter text to play:</label>
@@ -97,10 +97,8 @@
                     <p id="results-accuracy"></p>
                 </div>
                 <p id="level-unlock-message"></p>
-                <p class="results-instructions">Press <span class="key-hint">.</span>/<span class="key-hint">J</span> (Retry) or <span class="key-hint">-</span>/<span class="key-hint">K</span> (Next)</p>
-                <div>
-                    <button id="level-select-button">Level Select</button> </div>
-            </div>
+                <p class="results-instructions">Press <span class="key-hint">Dit</span> (Retry) or <span class="key-hint">Dah</span> (Next)</p>
+                 </div>
 
             <div id="level-selection-screen" class="hidden overlay">
                 <button id="level-select-menu-button" class="menu-nav-button" title="Main Menu">☰ Menu</button>
@@ -111,15 +109,11 @@
         </div> <div id="input-area" class="hidden">
             <button id="dit-button" class="morse-button" data-paddle-type="dit">
                 <svg class="paddle-svg" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg"><circle cx="25" cy="25" r="15" /></svg>
-                <span class="paddle-label"></span>
-            </button>
+                <span class="paddle-label"></span> </button>
             <button id="dah-button" class="morse-button" data-paddle-type="dah">
                 <svg class="paddle-svg" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="20" width="30" height="10" rx="3"/></svg>
-                 <span class="paddle-label"></span>
-            </button>
-        </div>
-
-        <div id="settings-modal" class="modal hidden">
+                 <span class="paddle-label"></span> </button>
+        </div> <div id="settings-modal" class="modal hidden">
             <div class="modal-header" id="settings-modal-header">
                 <span class="modal-title">Settings</span>
                 <button class="modal-close-button" id="settings-close-button">&times;</button>
@@ -130,6 +124,15 @@
 
                  <label for="frequency-slider">Tone (Hz): <span id="frequency-value-display">600</span></label>
                  <input type="range" id="frequency-slider" min="400" max="1000" value="600">
+
+                 <div class="key-mapping-row">
+                    <label for="dit-key-input">Dit Key:</label>
+                    <input type="text" id="dit-key-input" class="key-input" readonly placeholder="Click to set" title="Click to set Dit key">
+                 </div>
+                 <div class="key-mapping-row">
+                    <label for="dah-key-input">Dah Key:</label>
+                    <input type="text" id="dah-key-input" class="key-input" readonly placeholder="Click to set" title="Click to set Dah key">
+                 </div>
 
                  <div class="settings-toggle-row">
                      <label for="sound-toggle">Sound:</label>
@@ -143,18 +146,12 @@
 
                  <button id="reset-progress-button">Reset Progress</button>
             </div>
-        </div>
-
-    </div> <script src="js/config.js"></script>
+        </div> </div> <script src="js/config.js"></script>
     <script src="js/modal.js"></script>
     <script src="js/audioPlayer.js"></script>
     <script src="js/gameState.js"></script>
     <script src="js/scoreCalculator.js"></script>
     <script src="js/levelManager.js"></script>
     <script src="js/morseDecoder.js"></script>
-    <script src="js/uiManager.js"></script>
-    <script src="js/inputHandler.js"></script>
-    <script src="js/main.js"></script>
-
-</body>
+    <script src="js/uiManager.js"></script> <script src="js/inputHandler.js"></script> <script src="js/main.js"></script> </body>
 </html>

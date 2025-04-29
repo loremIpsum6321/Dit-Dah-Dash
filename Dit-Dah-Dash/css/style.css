@@ -11,6 +11,9 @@
  * Adds styles for volume slider and speaker icon.
  * Modifies volume slider to be horizontal.
  * Reverts layout: Sentence Top, Patterns/Volume Middle.
+ * Adds display area resizing when input area is hidden.
+ * Adds key mapping input styles.
+ * Updates pulse animation to target SVGs within the hint container.
  * **v2 Changes:**
  * - Added flex centering to .morse-button.
  * - Increased #dah-button .paddle-svg height slightly.
@@ -19,6 +22,15 @@
  * - Added styles for drag-over effect on paddles.
  * - Added styles for applying background texture to paddles.
  * - Removed background-color tint and blend-mode when texture is applied.
+ * **v4 Changes:**
+ * - Added pulse animation for the hint pattern container.
+ * **v5 Changes:**
+ * - Added styles for key mapping inputs in settings modal.
+ * - Adjusted display-area height when input-area is hidden.
+ * - Updated pulse animation to target SVGs directly.
+ * **v6 Changes:**
+ * - Refined correct/incorrect feedback styles for clarity.
+ * - Ensured pulse animation color variable is correctly defined and applied.
  */
 
 /* --- Global Styles & Resets --- */
@@ -37,11 +49,12 @@
     --button-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
     --button-active-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
     --pattern-bg: #eeeeee;
-    --pattern-svg-fill: #555555;
+    --pattern-svg-fill: #555555; /* Default SVG fill */
     --pattern-correct-bg: #c8e6c9; /* Green background for correct */
-    --pattern-correct-fill: #2e7d32; /* Darker green for correct SVG */
-    --pattern-incorrect-bg: #ffcdd2;
-    --pattern-incorrect-fill: #c62828;
+    --pattern-correct-fill: #1b5e20; /* Darker green for correct SVG */
+    --pattern-incorrect-bg: #ffcdd2; /* Red background for incorrect */
+    --pattern-incorrect-fill: #c62828; /* Darker red for incorrect SVG */
+    --pattern-pulse-color: #333333; /* Darker color for pulsing SVG in light mode */
     --text-display-wrapper-bg: #fdfdfd;
     --text-display-border: 1px solid #eee;
     --char-pending-color: var(--text-color);
@@ -93,7 +106,10 @@
     --volume-slider-thumb-border: 2px solid var(--container-bg);
     --speaker-icon-color: var(--hint-toggle-color);
     --paddle-drag-over-border: 3px dashed var(--button-primary-hover-bg);
-    /* --paddle-texture-opacity: 0.5; /* Opacity for the texture layer - REMOVED */
+    --key-input-bg: #f8f8f8;
+    --key-input-border: #ccc;
+    --key-input-focus-border: var(--button-primary-bg);
+    --hint-pulse-animation-duration: 1.5s; /* Duration for one pulse */
 }
 
 .dark-mode {
@@ -109,11 +125,12 @@
     --button-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
     --button-active-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
     --pattern-bg: #444444;
-    --pattern-svg-fill: #bbbbbb;
-    --pattern-correct-bg: #388E3C; /* Dark green background for correct */
-    --pattern-correct-fill: #c8e6c9; /* Light green for correct SVG */
-    --pattern-incorrect-bg: #D32F2F;
-    --pattern-incorrect-fill: #ffcdd2;
+    --pattern-svg-fill: #bbbbbb; /* Default SVG fill */
+    --pattern-correct-bg: #2e7d32; /* Dark green background for correct */
+    --pattern-correct-fill: #a5d6a7; /* Light green for correct SVG */
+    --pattern-incorrect-bg: #D32F2F; /* Dark red background for incorrect */
+    --pattern-incorrect-fill: #ffcdd2; /* Light red for incorrect SVG */
+    --pattern-pulse-color: #eeeeee; /* Lighter color for pulsing SVG in dark mode */
     --text-display-wrapper-bg: #2a2a2a;
     --text-display-border: 1px solid #444;
     --char-pending-color: var(--text-color);
@@ -165,7 +182,9 @@
     --volume-slider-thumb-border: 2px solid var(--container-bg);
     --speaker-icon-color: var(--hint-toggle-color);
     --paddle-drag-over-border: 3px dashed var(--button-primary-hover-bg);
-    /* --paddle-texture-opacity: 0.4; /* Slightly lower opacity for dark mode - REMOVED */
+    --key-input-bg: #555;
+    --key-input-border: #777;
+    --key-input-focus-border: var(--button-primary-hover-bg);
 }
 
 
@@ -179,13 +198,20 @@ html, body {
 /* --- Main Layout --- */
 #game-container { display: flex; flex-direction: column; width: 100%; height: 100%; position: fixed; top: 0; left: 0; }
 #display-area {
-    width: 100%; height: 80%; /* Default height */
+    width: 100%; height: 80%; /* Default height when paddles are shown */
     display: flex; flex-direction: column; /* Children stack vertically */
     padding: 10px 15px; position: relative;
     background-color: var(--container-bg);
     border-bottom: 2px solid var(--border-color); overflow: hidden;
     transition: background-color 0.3s ease, border-color 0.3s ease, height 0.3s ease;
 }
+/* When input area is hidden, display area takes full height */
+body.input-area-hidden #display-area {
+    height: 100%;
+    border-bottom: none;
+}
+
+
 #input-area {
     width: 100%; height: 20%; /* Default height */
     display: flex; justify-content: space-between;
@@ -257,13 +283,6 @@ html, body {
     filter: brightness(1.1); /* Slightly lighten */
 }
 
-/* Style when texture is applied */
-/* .morse-button.has-texture { */
-    /* background-blend-mode: overlay; /* REMOVED */
-    /* background-color: rgba(var(--button-dit-bg-rgb, 33, 150, 243), 0.7); /* REMOVED */
-/* } */
-/* #dit-button.has-texture { background-color: rgba(var(--button-dit-bg-rgb, 33, 150, 243), 0.7); } /* REMOVED */
-/* #dah-button.has-texture { background-color: rgba(var(--button-dah-bg-rgb, 255, 152, 0), 0.7); } /* REMOVED */
 
 /* Ensure SVG/Label are visible over texture */
 .morse-button .paddle-svg,
@@ -280,22 +299,21 @@ html, body {
     width: 20%; max-height: 40%; /* Relative to button height */
     min-height: 25px; fill: currentColor;
     pointer-events: none; flex-shrink: 0;
-    margin-bottom: -36px; /* Space between SVG and label */
+    /* margin-bottom: -36px; /* REMOVED negative margin */
     transition: display 0s; /* Instant transition for display property */
 }
 
-/* Removed fixed height for dit */
-/* #dit-button .paddle-svg { height: 30%; } */
 
 /* Slightly increased dah height */
 #dah-button .paddle-svg {
     max-height: 45%; /* Slightly larger max height for dah */
+    width: 24%; /* Make Dah slightly wider */
 }
 
 .paddle-label {
     font-size: 1.6em; /* Make label larger for results */
     color: var(--paddle-label-color);
-    margin-top: 4px;
+    /* margin-top: 4px; /* REMOVED fixed margin top */
     text-align: center;
     white-space: nowrap;
     min-height: 1.2em; /* Reserve space */
@@ -380,6 +398,7 @@ html, body {
     align-items: center;
     gap: 6px; /* Increase gap */
     transition: background-color 0.15s ease-in-out;
+    position: relative;
 }
 #user-pattern-container {
     margin: 5px auto 5px auto; /* Reduce bottom margin */
@@ -387,21 +406,47 @@ html, body {
     width: 95%; /* Further widen */
     max-width: 550px; /* Further widen max */
 }
-/* Increase SVG size */
+
+/* Base SVG styles */
 .pattern-container svg {
     width: 28px;  /* Larger size */
     height: 28px; /* Larger size */
-    fill: var(--pattern-svg-fill);
-    transition: fill 0.15s ease-in-out, visibility 0s, background-color 0.15s ease-in-out;
+    fill: var(--pattern-svg-fill); /* Use default fill */
+    transition: fill 0.15s ease-in-out, visibility 0s, transform 0.3s ease-in-out;
 }
 .pattern-container svg.pattern-dah {
     width: 42px; /* Larger size (maintain ratio) */
 }
-/* Apply feedback colors */
-.pattern-container.correct-pattern { background-color: var(--pattern-correct-bg); }
-.pattern-container.correct-pattern svg { fill: var(--pattern-correct-fill); }
-.pattern-container.incorrect-pattern { background-color: var(--pattern-incorrect-bg); }
-.pattern-container.incorrect-pattern svg { fill: var(--pattern-incorrect-fill); }
+
+/* CORRECT Feedback Styles */
+.pattern-container.correct-pattern {
+    background-color: var(--pattern-correct-bg); /* Green BG */
+}
+/* Target SVGs *inside* the correct container */
+.pattern-container.correct-pattern svg {
+    fill: var(--pattern-correct-fill); /* Green SVG fill */
+}
+
+/* INCORRECT Feedback Styles */
+.pattern-container.incorrect-pattern {
+    background-color: var(--pattern-incorrect-bg); /* Red BG */
+}
+/* Target SVGs *inside* the incorrect container */
+.pattern-container.incorrect-pattern svg {
+    fill: var(--pattern-incorrect-fill); /* Red SVG fill */
+}
+
+/* Hint Pulse Animation for SVGs */
+@keyframes svg-pulse-animation {
+    0% { transform: scale(1); fill: var(--pattern-svg-fill); } /* Start with default fill */
+    50% { transform: scale(1.1); fill: var(--pattern-pulse-color); } /* Scale up and change to pulse color */
+    100% { transform: scale(1); fill: var(--pattern-svg-fill); } /* Return to default fill */
+}
+
+/* Apply animation to SVGs inside the target container when the class is added by JS */
+#target-pattern-container svg.hint-svg-pulse {
+    animation: svg-pulse-animation var(--hint-pulse-animation-duration) ease-in-out infinite;
+}
 
 
 /* Hint Visibility Styles */
@@ -524,6 +569,7 @@ html, body {
 
 
 
+
 /* --- Stats Display (Removed from Game UI, only in Results) --- */
 #stats-display {
     display: none; /* Hide by default */
@@ -624,6 +670,56 @@ html, body {
     color: var(--star-filled-color);
 }
 
+/* --- Settings Key Mapping Styles --- */
+.key-mapping-row {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 10px;
+    width: 100%;
+}
+
+/* Override general modal label styles */
+.key-mapping-row label {
+    width: auto !important;
+    display: inline !important;
+    flex-shrink: 0;
+    margin-bottom: 0;
+    min-width: 70px;
+    text-align: right;
+}
+
+.key-input {
+    padding: 6px 10px;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 1em;
+    text-align: center;
+    border: 1px solid var(--key-input-border);
+    border-radius: 4px;
+    background-color: var(--key-input-bg);
+    color: var(--text-color);
+    width: 90px;
+    min-width: 70px;
+    max-width: 120px;
+    cursor: pointer;
+    transition: border-color 0.2s ease, background-color 0.3s ease, color 0.3s ease;
+    text-transform: uppercase;
+}
+
+.key-input:focus {
+    outline: none;
+    border-color: var(--key-input-focus-border);
+    box-shadow: 0 0 0 2px var(--button-primary-hover-bg);
+}
+
+.key-input.listening {
+    font-style: italic;
+    opacity: 0.8;
+}
+
+/* --- End Settings Key Mapping Styles --- */
+
 
 /* --- Utility Classes --- */
 .hidden { display: none !important; }
@@ -633,17 +729,17 @@ html, body {
     #top-spacer { display: none;}
     #display-area { height: 58%; padding: 5px 10px; }
     #input-area { height: 48%; padding: 10px; gap: 10px; }
-    #text-display-wrapper { max-width: 95%; margin: 3px auto; padding: 5px 0; line-height: 1.2; min-height: 60px; }
+    #text-display-wrapper { max-width: 95%; margin: 3px auto; padding: 48px 0; line-height: 1.2; min-height: 60px; }
     #target-pattern-outer-wrapper, #user-pattern-container { width: 90%; max-width: 400px; margin: 4px auto; } /* Adjust landscape max width */
     .pattern-container { min-height: 40px; padding: 3px 8px; gap: 3px; } /* Adjust landscape height/padding */
     .pattern-container svg { width: 20px; height: 20px; } /* Adjust landscape svg size */
-    .pattern-container svg.pattern-dah { width: 48px; } /* Adjust landscape dah size */
+    .pattern-container svg.pattern-dah { width: 30px; } /* Adjust landscape dah size */
     #stats-display { font-size: 1.0em; padding: 4px 0; gap: 5px 10px; }
     #stats-display > div { padding: 3px 6px; }
     .hint-toggle svg { width: 1.2em; height: 1.2em; }
     .hint-toggle { right: 2px; padding: 0 2px; }
-    .morse-button .paddle-svg { min-height: 10px; margin-bottom: 3px; }
-    .paddle-label { font-size: 0.8em; margin-top: 2px; }
+    .morse-button .paddle-svg { min-height: 10px; /* Removed margin-bottom */ }
+    .paddle-label { font-size: 0.8em; /* Removed margin-top */ }
     .morse-button.results-label-active .paddle-label { font-size: 1.5em; }
     .menu-nav-button { font-size: 1.0em; padding: 4px 8px; top: 5px; left: 5px; }
     .overlay { padding-top: 40px; }
@@ -651,10 +747,6 @@ html, body {
     #results-stats p { font-size: 1em; margin-bottom: 3px;}
     #results-screen .results-instructions { font-size: 0.9em; }
     /* Volume Landscape */
-    /* #volume-control-area { width: 50%; max-width: 280px; gap: 8px; margin: 3px auto 5px auto; }
-    #volume-slider { height: 8px; }
-    #volume-slider::-webkit-slider-thumb, #volume-slider::-moz-range-thumb, #volume-slider::-ms-thumb { width: 16px; height: 16px; margin-top: -4px; }
-    #speaker-icon { width: 26px; height: 26px; } */
     #volume-slider {display: none; } /* Hide volume slider in landscape */
     #speaker-icon { display: none; } /* Hide speaker icon in landscape */
     .menu-nav-button { display: none; }
@@ -668,7 +760,7 @@ html, body {
     .morse-button.results-label-active .paddle-label { font-size: 1.6em; }
     #target-pattern-outer-wrapper, #user-pattern-container { width: 95%; max-width: none; } /* Take more width, remove max */
     .pattern-container svg { width: 24px; height: 24px; } /* Adjust small screen svg size */
-    .pattern-container svg.pattern-dah { width: 48px; } /* Adjust small screen dah size */
+    .pattern-container svg.pattern-dah { width: 36px; } /* Adjust small screen dah size */
     .pattern-container { min-height: 50px; gap: 4px; } /* Adjust small screen height/gap */
     /* Volume Small Screen */
     #volume-control-area { width: 70%; max-width: 250px; gap: 10px; margin: 3px auto 5px auto; } /* Slightly more gap */
@@ -678,4 +770,15 @@ html, body {
 
     /* Hide game menu button */
     .menu-nav-button { display: none; }
+}
+
+/* Ensure modal content allows its children to determine layout */
+.modal-content > * {
+     max-width: 100%; /* Prevent overflow */
+}
+/* Explicitly set width for elements that should span */
+.modal-content input[type="range"],
+.modal-content .settings-toggle-row,
+.modal-content button {
+    width: 100%;
 }

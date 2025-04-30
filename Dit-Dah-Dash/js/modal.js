@@ -1,6 +1,6 @@
 /* In file: js/modal.js */
 /**
- * js/modal.js
+ * js/modal.js ++
  * -----------
  * Handles basic modal functionality including showing, hiding,
  * and simple drag-and-drop for the modal window.
